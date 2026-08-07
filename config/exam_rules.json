@@ -1,0 +1,119 @@
+{
+    "exam_name": "CEFR Multilevel",
+    "version": "2024",
+    "passing_threshold": 0.60,
+    "levels": {
+      "A1": {"min": 0, "max": 25},
+      "A2": {"min": 26, "max": 40},
+      "B1": {"min": 41, "max": 50},
+      "B2": {"min": 51, "max": 64},
+      "C1": {"min": 65, "max": 75}
+    },
+    "skills": {
+      "Listening": {
+        "total_questions": 30,
+        "parts": {
+          "Part1": {"level": "B1", "questions": 5, "type": "sentence_completion"},
+          "Part2": {"level": "B1", "questions": 5, "type": "multiple_choice"},
+          "Part3": {"level": "B2", "questions": 6, "type": "matching"},
+          "Part4": {"level": "B2", "questions": 6, "type": "note_completion"},
+          "Part5": {"level": "C1", "questions": 4, "type": "multiple_choice"},
+          "Part6": {"level": "C1", "questions": 4, "type": "summary_completion"}
+        }
+      },
+      "Reading": {
+        "total_questions": 35,
+        "parts": {
+          "Part1": {"level": "B1", "questions": 5, "type": "multiple_choice"},
+          "Part2": {"level": "B1", "questions": 5, "type": "true_false"},
+          "Part3": {"level": "B2", "questions": 7, "type": "matching_headings"},
+          "Part4": {"level": "B2", "questions": 6, "type": "gap_filling"},
+          "Part5": {"level": "C1", "questions": 6, "type": "inference"},
+          "Part6": {"level": "C1", "questions": 6, "type": "summary_completion"}
+        }
+      },
+      "Writing": {
+        "tasks": {
+          "Task1": {
+            "type": "formal_letter",
+            "min_words": 150,
+            "level": "B2",
+            "rubric": {
+              "Task Achievement": {"max": 5},
+              "Coherence_Cohesion": {"max": 5},
+              "Lexical_Resource": {"max": 5},
+              "Grammar_Range": {"max": 5}
+            }
+          },
+          "Task2": {
+            "type": "argumentative_essay",
+            "min_words": 250,
+            "level": "C1",
+            "rubric": {
+              "Task Achievement": {"max": 5},
+              "Coherence_Cohesion": {"max": 5},
+              "Lexical_Resource": {"max": 5},
+              "Grammar_Range": {"max": 5}
+            }
+          }
+        }
+      },
+      "Speaking": {
+        "total_questions": 8,
+        "parts": {
+          "Part1": {"level": "B1", "questions": 3, "type": "personal_questions", "prep_time": 5},
+          "Part2": {"level": "B2", "questions": 3, "type": "image_description", "prep_time": 30},
+          "Part3": {"level": "C1", "questions": 2, "type": "argumentative", "prep_time": 60}
+        },
+        "rubric": {
+          "Fluency": {"max": 25},
+          "Grammar": {"max": 25},
+          "Vocabulary": {"max": 25},
+          "Pronunciation": {"max": 25}
+        }
+      },
+      "Lexical_Grammar": {
+        "total_questions": 25,
+        "parts": {
+          "Part1": {"level": "B1", "questions": 10, "type": "gap_filling"},
+          "Part2": {"level": "B2", "questions": 10, "type": "word_formation"},
+          "Part3": {"level": "C1", "questions": 5, "type": "error_correction"}
+        }
+      }
+    },
+    "study_dna": {
+      "weak_threshold": 60,
+      "strong_threshold": 80,
+      "question_types": {
+        "Reading": [
+          "multiple_choice",
+          "true_false",
+          "matching_headings",
+          "gap_filling",
+          "inference",
+          "summary_completion"
+        ],
+        "Listening": [
+          "sentence_completion",
+          "multiple_choice",
+          "matching",
+          "note_completion",
+          "summary_completion"
+        ]
+      }
+    },
+    "vocabulary": {
+      "daily_words": 15,
+      "spaced_repetition_days": [1, 3, 7, 14, 30],
+      "mining": {
+        "b2_priority": true,
+        "max_per_session": 15,
+        "factors": [
+          "exam_frequency",
+          "user_history",
+          "weekly_occurrence",
+          "level_importance"
+        ]
+      }
+    }
+  }

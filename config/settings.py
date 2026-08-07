@@ -1,4 +1,3 @@
-# IFA Mentor — Sozlamalar
 import os
 from dotenv import load_dotenv
 
@@ -14,7 +13,7 @@ CURRENT_LEVEL = "B1"
 TARGET_LEVEL = "B2"
 TARGET_DATE = "2026-10-01"
 
-# Ballar (sertifikatingizdan)
+# Sertifikat ballari
 CURRENT_SCORES = {
     "listening": 49,
     "reading": 55,
@@ -23,13 +22,31 @@ CURRENT_SCORES = {
     "overall": 46
 }
 
-# Maqsad ballar (B2)
+# CEFR darajalar (TO'G'RI tizim)
+CEFR_LEVELS = {
+    "A1": (0, 25),
+    "A2": (26, 40),
+    "B1": (41, 50),
+    "B2": (51, 64),
+    "C1": (65, 75)
+}
+
+# B2 uchun maqsad (overall 51+)
 TARGET_SCORES = {
-    "listening": 60,
-    "reading": 60,
-    "writing": 60,
-    "speaking": 60,
     "overall": 51
+}
+
+# Rule Engine — Reading
+READING_RULES = {
+    "total_questions": 35,
+    "parts": {
+        "Part1": {"level": "B1", "questions": 5},
+        "Part2": {"level": "B1", "questions": 5},
+        "Part3": {"level": "B2", "questions": 7},
+        "Part4": {"level": "B2", "questions": 6},
+        "Part5": {"level": "C1", "questions": 6},
+        "Part6": {"level": "C1", "questions": 6}
+    }
 }
 
 # Papkalar
@@ -40,3 +57,8 @@ LOGS_DIR = os.path.join(BASE_DIR, "logs")
 
 # Kunlik o'qish vaqti (daqiqa)
 DAILY_STUDY_TIME = 90
+
+# Loyiha
+APP_NAME = "IFA Mentor"
+APP_TAGLINE = "A personal AI mentor that studies you before it teaches you."
+APP_VERSION = "1.0.0"

@@ -5,10 +5,10 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QPushButton, QLabel,
     QStackedWidget, QFrame, QScrollArea
 )
-from PyQt6.QtCore import Qt, QSize, QTimer
-from PyQt6.QtGui import QFont, QIcon
+from PyQt6.QtCore import Qt
 from src.ui.styles import MAIN_STYLE, SKILL_ICONS
 from config.settings import USER_NAME, APP_NAME
+
 
 class Sidebar(QWidget):
     def __init__(self, on_navigate):
@@ -16,6 +16,7 @@ class Sidebar(QWidget):
         self.setObjectName("sidebar")
         self.on_navigate = on_navigate
         self.active_btn = None
+        self.nav_buttons = {}
         self._build()
 
     def _build(self):
@@ -27,30 +28,26 @@ class Sidebar(QWidget):
         logo_frame = QFrame()
         logo_frame.setStyleSheet(
             "border-bottom: 1px solid #1E293B;"
-            "padding-bottom: 16px;"
         )
         logo_layout = QVBoxLayout(logo_frame)
         logo_layout.setContentsMargins(20, 24, 20, 16)
 
-        logo = QLabel("⬡ IFA\nMENTOR")
-        logo.setObjectName("logo_label")
+        logo = QLabel("⬡ IFA MENTOR")
         logo.setStyleSheet(
-            "font-size: 18px; font-weight: bold;"
+            "font-size: 16px; font-weight: bold;"
             "color: #F1F5F9; letter-spacing: 2px;"
+            "border: none;"
         )
-
         logo_sub = QLabel("AI English Coach")
-        logo_sub.setObjectName("logo_sub")
         logo_sub.setStyleSheet(
             "font-size: 10px; color: #3B82F6;"
-            "letter-spacing: 1px;"
+            "letter-spacing: 1px; border: none;"
         )
-
         logo_layout.addWidget(logo)
         logo_layout.addWidget(logo_sub)
         layout.addWidget(logo_frame)
 
-        # Nav buttons
+        # Nav scroll
         nav_scroll = QScrollArea()
         nav_scroll.setWidgetResizable(True)
         nav_scroll.setHorizontalScrollBarPolicy(
@@ -66,7 +63,6 @@ class Sidebar(QWidget):
         nav_layout.setContentsMargins(0, 12, 0, 12)
         nav_layout.setSpacing(2)
 
-        self.nav_buttons = {}
         pages = [
             "Home", "Study DNA", "Reading",
             "Listening", "Speaking", "Writing",
@@ -77,25 +73,9 @@ class Sidebar(QWidget):
         for page in pages:
             icon = SKILL_ICONS.get(page, "•")
             btn = QPushButton(f"  {icon}  {page}")
-            btn.setObjectName("nav_btn")
             btn.setFixedHeight(38)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background: transparent;
-                    color: #94A3B8;
-                    border: none;
-                    border-radius: 8px;
-                    padding: 8px 16px;
-                    text-align: left;
-                    font-size: 13px;
-                    margin: 1px 8px;
-                }
-                QPushButton:hover {
-                    background-color: #1E293B;
-                    color: #F1F5F9;
-                }
-            """)
+            btn.setStyleSheet(self._btn_style(False))
             btn.clicked.connect(
                 lambda checked, p=page: self._navigate(p)
             )
@@ -109,57 +89,35 @@ class Sidebar(QWidget):
         # User info
         user_frame = QFrame()
         user_frame.setStyleSheet(
-            "border-top: 1px solid #1E293B; padding: 12px;"
+            "border-top: 1px solid #1E293B;"
         )
         user_layout = QHBoxLayout(user_frame)
         user_layout.setContentsMargins(16, 12, 16, 12)
 
         avatar = QLabel("👤")
-        avatar.setStyleSheet("font-size: 24px;")
+        avatar.setStyleSheet("font-size: 22px; border: none;")
 
-        user_info = QVBoxLayout()
+        info_layout = QVBoxLayout()
         name_lbl = QLabel(USER_NAME)
         name_lbl.setStyleSheet(
-            "font-size: 13px; font-weight: bold; color: #F1F5F9;"
+            "font-size: 13px; font-weight: bold;"
+            "color: #F1F5F9; border: none;"
         )
         level_lbl = QLabel("B1 → B2")
         level_lbl.setStyleSheet(
-            "font-size: 11px; color: #3B82F6;"
+            "font-size: 11px; color: #3B82F6; border: none;"
         )
-        user_info.addWidget(name_lbl)
-        user_info.addWidget(level_lbl)
+        info_layout.addWidget(name_lbl)
+        info_layout.addWidget(level_lbl)
+        info_layout.setSpacing(2)
 
         user_layout.addWidget(avatar)
-        user_layout.addLayout(user_info)
+        user_layout.addLayout(info_layout)
         layout.addWidget(user_frame)
 
-        # Default: Home
-        self._navigate("Home")
-
-    def _navigate(self, page):
-        # Oldingi tugmani reset
-        if self.active_btn:
-            self.active_btn.setStyleSheet("""
-                QPushButton {
-                    background: transparent;
-                    color: #94A3B8;
-                    border: none;
-                    border-radius: 8px;
-                    padding: 8px 16px;
-                    text-align: left;
-                    font-size: 13px;
-                    margin: 1px 8px;
-                }
-                QPushButton:hover {
-                    background-color: #1E293B;
-                    color: #F1F5F9;
-                }
-            """)
-
-        # Yangi tugmani faollashtirish
-        btn = self.nav_buttons.get(page)
-        if btn:
-            btn.setStyleSheet("""
+    def _btn_style(self, active):
+        if active:
+            return """
                 QPushButton {
                     background-color: #1E3A5F;
                     color: #3B82F6;
@@ -172,10 +130,35 @@ class Sidebar(QWidget):
                     font-weight: bold;
                     margin: 1px 8px;
                 }
-            """)
-            self.active_btn = btn
+            """
+        return """
+            QPushButton {
+                background: transparent;
+                color: #94A3B8;
+                border: none;
+                border-radius: 8px;
+                padding: 8px 16px;
+                text-align: left;
+                font-size: 13px;
+                margin: 1px 8px;
+            }
+            QPushButton:hover {
+                background-color: #1E293B;
+                color: #F1F5F9;
+            }
+        """
 
+    def _navigate(self, page):
+        if self.active_btn:
+            self.active_btn.setStyleSheet(self._btn_style(False))
+        btn = self.nav_buttons.get(page)
+        if btn:
+            btn.setStyleSheet(self._btn_style(True))
+            self.active_btn = btn
         self.on_navigate(page)
+
+    def set_active(self, page):
+        self._navigate(page)
 
 
 class MainWindow(QMainWindow):
@@ -183,9 +166,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.db = db
         self.ai = ai
+        self.pages = {}
         self._setup_window()
         self._build_ui()
-        self._navigate("Home")
+        # Sahifalar tayyor bo'lgach navigate
+        self.sidebar.set_active("Home")
 
     def _setup_window(self):
         self.setWindowTitle(f"{APP_NAME} — CEFR B2 Coach")
@@ -201,46 +186,42 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Sidebar
+        # Sidebar — navigate ni keyinroq ulaymiz
         self.sidebar = Sidebar(self._navigate)
         main_layout.addWidget(self.sidebar)
 
-        # Content area
+        # Stack
         self.stack = QStackedWidget()
-        self.stack.setStyleSheet(
-            "background-color: #0A0F1E;"
-        )
+        self.stack.setStyleSheet("background-color: #0A0F1E;")
         main_layout.addWidget(self.stack)
 
-        # Sahifalarni import va qo'shish
+        # Sahifalar
         self._init_pages()
 
     def _init_pages(self):
         from src.ui.dashboard_widget import DashboardWidget
         from src.ui.placeholder_widget import PlaceholderWidget
 
-        self.pages = {}
-
         # Dashboard
-        self.pages["Home"] = DashboardWidget(self.db, self.ai)
-        self.stack.addWidget(self.pages["Home"])
+        dashboard = DashboardWidget(self.db, self.ai)
+        self.pages["Home"] = dashboard
+        self.stack.addWidget(dashboard)
 
-        # Qolgan sahifalar (placeholder)
-        other_pages = [
+        # Placeholder sahifalar
+        others = [
             "Study DNA", "Reading", "Listening",
             "Speaking", "Writing", "Vocabulary",
             "Library", "Mock Exams", "Progress",
             "Statistics", "Settings"
         ]
-        for page in other_pages:
-            widget = PlaceholderWidget(page)
-            self.pages[page] = widget
-            self.stack.addWidget(widget)
+        for page in others:
+            w = PlaceholderWidget(page)
+            self.pages[page] = w
+            self.stack.addWidget(w)
 
     def _navigate(self, page):
         widget = self.pages.get(page)
         if widget:
             self.stack.setCurrentWidget(widget)
-            # Dashboard refresh
-            if page == "Home" and hasattr(widget, 'refresh'):
+            if hasattr(widget, 'refresh'):
                 widget.refresh()

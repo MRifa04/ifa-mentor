@@ -153,22 +153,19 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
         self.stack = QStackedWidget()
         self.stack.setStyleSheet('background:#0A0F1E;')
-
         self._load_pages()
-
         self.sidebar = Sidebar(self._navigate)
         layout.addWidget(self.sidebar)
         layout.addWidget(self.stack)
-
         self.sidebar.activate('Home')
 
     def _load_pages(self):
         from src.ui.dashboard_widget import DashboardWidget
         from src.ui.speaking_widget import SpeakingWidget
         from src.ui.progress_widget import ProgressWidget
+        from src.ui.writing_widget import WritingWidget
         from src.ui.placeholder_widget import PlaceholderWidget
 
         dash = DashboardWidget(self.db, self.ai)
@@ -183,10 +180,14 @@ class MainWindow(QMainWindow):
         self.pages['Progress'] = pr
         self.stack.addWidget(pr)
 
+        wr = WritingWidget(self.db, self.ai)
+        self.pages['Writing'] = wr
+        self.stack.addWidget(wr)
+
         for page in [
             'Study DNA', 'Reading', 'Listening',
-            'Writing', 'Vocabulary', 'Library',
-            'Mock Exams', 'Statistics', 'Settings'
+            'Vocabulary', 'Library', 'Mock Exams',
+            'Statistics', 'Settings'
         ]:
             w = PlaceholderWidget(page)
             self.pages[page] = w

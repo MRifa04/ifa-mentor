@@ -62,3 +62,13 @@ DAILY_STUDY_TIME = 90
 APP_NAME = "IFA Mentor"
 APP_TAGLINE = "A personal AI mentor that studies you before it teaches you."
 APP_VERSION = "1.0.0"
+# AI Engine tanlash
+AI_ENGINE = "gemini"  # "gemini" | "claude" | "ollama"
+
+# Gemini
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = "gemini-2.0-flash"
+
+# Ollama (keyinroq)
+OLLAMA_URL = "http://localhost:11434"
+OLLAMA_MODEL = "llama3"

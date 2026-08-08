@@ -1,0 +1,7 @@
+﻿.env
+__pycache__/
+*.pyc
+*.pyo
+database/ifa_mentor.db
+src/__pycache__/
+config/__pycache__/

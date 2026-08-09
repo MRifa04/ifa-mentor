@@ -161,6 +161,7 @@ class MainWindow(QMainWindow):
         from src.ui.progress_widget import ProgressWidget
         from src.ui.writing_widget import WritingWidget
         from src.ui.vocabulary_widget import VocabularyWidget
+        from src.ui.settings_widget import SettingsWidget
         from src.ui.placeholder_widget import PlaceholderWidget
 
         dash = DashboardWidget(self.db, self.ai)
@@ -183,10 +184,13 @@ class MainWindow(QMainWindow):
         self.pages['Vocabulary'] = vb
         self.stack.addWidget(vb)
 
+        st = SettingsWidget(self.db, self.ai)
+        self.pages['Settings'] = st
+        self.stack.addWidget(st)
+
         for page in [
             'Study DNA', 'Reading', 'Listening',
-            'Library', 'Mock Exams',
-            'Statistics', 'Settings'
+            'Library', 'Mock Exams', 'Statistics'
         ]:
             w = PlaceholderWidget(page)
             self.pages[page] = w

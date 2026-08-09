@@ -21,7 +21,6 @@ class Sidebar(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
         logo_frame = QFrame()
         logo_frame.setStyleSheet(
             'border-bottom:1px solid #1E293B;'
@@ -40,13 +39,11 @@ class Sidebar(QWidget):
         ll.addWidget(logo)
         ll.addWidget(sub)
         layout.addWidget(logo_frame)
-
         nav_w = QWidget()
         nav_w.setStyleSheet('background:transparent;')
         nav_l = QVBoxLayout(nav_w)
         nav_l.setContentsMargins(0, 12, 0, 12)
         nav_l.setSpacing(2)
-
         pages = [
             'Home', 'Study DNA', 'Reading',
             'Listening', 'Speaking', 'Writing',
@@ -64,9 +61,7 @@ class Sidebar(QWidget):
             )
             self.nav_buttons[page] = btn
             nav_l.addWidget(btn)
-
         nav_l.addStretch()
-
         sc = QScrollArea()
         sc.setWidget(nav_w)
         sc.setWidgetResizable(True)
@@ -77,7 +72,6 @@ class Sidebar(QWidget):
             'QScrollArea{border:none;background:transparent;}'
         )
         layout.addWidget(sc)
-
         uf = QFrame()
         uf.setStyleSheet('border-top:1px solid #1E293B;')
         ul = QHBoxLayout(uf)
@@ -166,6 +160,7 @@ class MainWindow(QMainWindow):
         from src.ui.speaking_widget import SpeakingWidget
         from src.ui.progress_widget import ProgressWidget
         from src.ui.writing_widget import WritingWidget
+        from src.ui.vocabulary_widget import VocabularyWidget
         from src.ui.placeholder_widget import PlaceholderWidget
 
         dash = DashboardWidget(self.db, self.ai)
@@ -184,9 +179,13 @@ class MainWindow(QMainWindow):
         self.pages['Writing'] = wr
         self.stack.addWidget(wr)
 
+        vb = VocabularyWidget(self.db, self.ai)
+        self.pages['Vocabulary'] = vb
+        self.stack.addWidget(vb)
+
         for page in [
             'Study DNA', 'Reading', 'Listening',
-            'Vocabulary', 'Library', 'Mock Exams',
+            'Library', 'Mock Exams',
             'Statistics', 'Settings'
         ]:
             w = PlaceholderWidget(page)

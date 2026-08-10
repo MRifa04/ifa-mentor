@@ -166,6 +166,7 @@ class MainWindow(QMainWindow):
         from src.ui.listening_widget import ListeningWidget
         from src.ui.study_dna_widget import StudyDNAWidget
         from src.ui.mock_exams_widget import MockExamsWidget
+        from src.ui.statistics_widget import StatisticsWidget
         from src.ui.placeholder_widget import PlaceholderWidget
 
         dash = DashboardWidget(self.db, self.ai)
@@ -208,10 +209,13 @@ class MainWindow(QMainWindow):
         self.pages['Mock Exams'] = mk
         self.stack.addWidget(mk)
 
-        for page in ['Library', 'Statistics']:
-            w = PlaceholderWidget(page)
-            self.pages[page] = w
-            self.stack.addWidget(w)
+        stat = StatisticsWidget(self.db, self.ai)
+        self.pages['Statistics'] = stat
+        self.stack.addWidget(stat)
+
+        lib = PlaceholderWidget('Library')
+        self.pages['Library'] = lib
+        self.stack.addWidget(lib)
 
     def _navigate(self, page):
         w = self.pages.get(page)

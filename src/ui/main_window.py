@@ -163,6 +163,9 @@ class MainWindow(QMainWindow):
         from src.ui.vocabulary_widget import VocabularyWidget
         from src.ui.settings_widget import SettingsWidget
         from src.ui.reading_widget import ReadingWidget
+        from src.ui.listening_widget import ListeningWidget
+        from src.ui.study_dna_widget import StudyDNAWidget
+        from src.ui.mock_exams_widget import MockExamsWidget
         from src.ui.placeholder_widget import PlaceholderWidget
 
         dash = DashboardWidget(self.db, self.ai)
@@ -193,10 +196,19 @@ class MainWindow(QMainWindow):
         self.pages['Reading'] = rd
         self.stack.addWidget(rd)
 
-        for page in [
-            'Study DNA', 'Listening',
-            'Library', 'Mock Exams', 'Statistics'
-        ]:
+        ls = ListeningWidget(self.db, self.ai)
+        self.pages['Listening'] = ls
+        self.stack.addWidget(ls)
+
+        dna = StudyDNAWidget(self.db, self.ai)
+        self.pages['Study DNA'] = dna
+        self.stack.addWidget(dna)
+
+        mk = MockExamsWidget(self.db, self.ai)
+        self.pages['Mock Exams'] = mk
+        self.stack.addWidget(mk)
+
+        for page in ['Library', 'Statistics']:
             w = PlaceholderWidget(page)
             self.pages[page] = w
             self.stack.addWidget(w)

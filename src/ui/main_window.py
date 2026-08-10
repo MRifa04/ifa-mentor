@@ -167,7 +167,7 @@ class MainWindow(QMainWindow):
         from src.ui.study_dna_widget import StudyDNAWidget
         from src.ui.mock_exams_widget import MockExamsWidget
         from src.ui.statistics_widget import StatisticsWidget
-        from src.ui.placeholder_widget import PlaceholderWidget
+        from src.ui.library_widget import LibraryWidget
 
         dash = DashboardWidget(self.db, self.ai)
         self.pages['Home'] = dash
@@ -213,7 +213,7 @@ class MainWindow(QMainWindow):
         self.pages['Statistics'] = stat
         self.stack.addWidget(stat)
 
-        lib = PlaceholderWidget('Library')
+        lib = LibraryWidget(self.db, self.ai)
         self.pages['Library'] = lib
         self.stack.addWidget(lib)
 

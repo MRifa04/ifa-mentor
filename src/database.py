@@ -143,6 +143,10 @@ class Database:
                 duration_minutes INTEGER,
                 is_completed INTEGER DEFAULT 0,
                 score REAL,
+                original_duration_minutes INTEGER,
+                carryover_minutes INTEGER DEFAULT 0,
+                carryover_source_date TEXT,
+                carryover_processed INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -160,6 +164,22 @@ class Database:
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Eski bazalar uchun daily_plan ustunlarini avtomatik qo'shish
+        # (ALTER TABLE IF NOT EXISTS SQLite'da mavjud emas, shuning uchun tekshiramiz.)
+        cursor.execute("PRAGMA table_info(daily_plan)")
+        daily_columns = {row[1] for row in cursor.fetchall()}
+        migrations = {
+            "original_duration_minutes": "INTEGER",
+            "carryover_minutes": "INTEGER DEFAULT 0",
+            "carryover_source_date": "TEXT",
+            "carryover_processed": "INTEGER DEFAULT 0",
+        }
+        for column, definition in migrations.items():
+            if column not in daily_columns:
+                cursor.execute(
+                    f"ALTER TABLE daily_plan ADD COLUMN {column} {definition}"
+                )
 
         # Boshlang'ich foydalanuvchi
         cursor.execute("""
@@ -396,36 +416,107 @@ class Database:
 
     # ─── DAILY PLAN ─────────────────────────────────────────
 
-    def create_daily_plan(self, plans):
+    def create_daily_plan(self, plans, plan_date=None, replace=True):
+        """
+        Berilgan sana uchun kunlik reja yaratadi.
+
+        Backward-compatible: oldingi chaqiruvlar plan_date bermasa bugunni ishlatadi.
+        """
         conn = self.connect()
         cursor = conn.cursor()
-        today = datetime.now().strftime("%Y-%m-%d")
-        cursor.execute("DELETE FROM daily_plan WHERE date=?", (today,))
+        plan_date = plan_date or datetime.now().strftime("%Y-%m-%d")
+
+        if replace:
+            cursor.execute("DELETE FROM daily_plan WHERE date=?", (plan_date,))
+
         for plan in plans:
+            duration = int(plan.get("duration", plan.get("duration_minutes", 0)) or 0)
+            carryover = int(plan.get("carryover_minutes", 0) or 0)
+            original = int(
+                plan.get("original_duration_minutes", duration - carryover)
+                or 0
+            )
             cursor.execute("""
-                INSERT INTO daily_plan (date, skill, task_type, material_id, duration_minutes)
-                VALUES (?, ?, ?, ?, ?)
-            """, (today, plan["skill"], plan["task_type"],
-                  plan.get("material_id"), plan["duration"]))
+                INSERT INTO daily_plan
+                (date, skill, task_type, material_id, duration_minutes,
+                 is_completed, score, original_duration_minutes,
+                 carryover_minutes, carryover_source_date, carryover_processed)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                plan_date,
+                plan["skill"],
+                plan["task_type"],
+                plan.get("material_id"),
+                duration,
+                int(plan.get("is_completed", 0) or 0),
+                plan.get("score"),
+                original,
+                carryover,
+                plan.get("carryover_source_date"),
+                int(plan.get("carryover_processed", 0) or 0),
+            ))
+
         conn.commit()
         self.close()
 
     def get_today_plan(self):
+        today = datetime.now().strftime("%Y-%m-%d")
+        return self.get_plan_for_date(today)
+
+    def get_plan_for_date(self, plan_date):
         conn = self.connect()
         cursor = conn.cursor()
-        today = datetime.now().strftime("%Y-%m-%d")
         cursor.execute("""
-            SELECT * FROM daily_plan WHERE date=? ORDER BY id ASC
-        """, (today,))
+            SELECT * FROM daily_plan
+            WHERE date=? ORDER BY id ASC
+        """, (plan_date,))
         rows = cursor.fetchall()
         self.close()
         return [dict(r) for r in rows]
+
+    def get_pending_plan_tasks(self, start_date, end_date):
+        """
+        Berilgan oraliqdagi bajarilmagan va hali carry-over qilinmagan
+        vazifalarni qaytaradi.
+        """
+        conn = self.connect()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM daily_plan
+            WHERE date >= ? AND date < ?
+              AND is_completed = 0
+              AND COALESCE(carryover_processed, 0) = 0
+            ORDER BY date ASC, id ASC
+        """, (start_date, end_date))
+        rows = cursor.fetchall()
+        self.close()
+        return [dict(r) for r in rows]
+
+    def mark_plan_tasks_carried(self, task_ids):
+        """
+        Carry-over qilingan eski vazifalarni qayta taqsimlangan deb belgilaydi.
+        0 = pending, 1 = completed, 2 = carried-over.
+        """
+        if not task_ids:
+            return
+        conn = self.connect()
+        cursor = conn.cursor()
+        placeholders = ",".join("?" for _ in task_ids)
+        cursor.execute(
+            f"UPDATE daily_plan SET is_completed=2, carryover_processed=1"
+            f" WHERE id IN ({placeholders})",
+            list(task_ids)
+        )
+        conn.commit()
+        self.close()
 
     def complete_plan_task(self, task_id, score):
         conn = self.connect()
         cursor = conn.cursor()
         cursor.execute("""
-            UPDATE daily_plan SET is_completed=1, score=? WHERE id=?
+            UPDATE daily_plan
+            SET is_completed=1, score=?
+            WHERE id=? AND is_completed=0
         """, (score, task_id))
         conn.commit()
         self.close()

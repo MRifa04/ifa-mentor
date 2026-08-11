@@ -106,8 +106,8 @@ class RadarChart(QWidget):
             self.scores.items()
         ):
             angle = angles[i]
-            lx = cx + (radius + 36) * math.cos(angle)
-            ly = cy - (radius + 36) * math.sin(angle)
+            lx = cx + (radius + 20) * math.cos(angle)
+            ly = cy - (radius + 20) * math.sin(angle)
             color = colors.get(skill, "#94A3B8")
             painter.setPen(QColor(color))
             painter.drawText(

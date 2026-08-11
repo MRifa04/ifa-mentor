@@ -249,35 +249,115 @@ class SmartPlanner:
 
     # ── KUNLIK VAZIFA YANGILASH ──────────────────────────────
 
+    def _build_base_tasks(self, goal_plan):
+        """Bugungi odatiy vazifalarni goal_plan'dan yaratadi."""
+        daily = goal_plan.get("daily_plan", {})
+        skill_task_map = {
+            "speaking": "practice",
+            "writing": "essay",
+            "listening": "practice",
+            "reading": "practice",
+            "vocabulary": "review"
+        }
+
+        return [
+            {
+                "skill": skill.title(),
+                "task_type": skill_task_map.get(skill, "practice"),
+                "duration": int(minutes),
+                "original_duration_minutes": int(minutes),
+            }
+            for skill, minutes in daily.items()
+        ]
+
+    def _calculate_carryover(self, today=None, window_days=5):
+        """
+        Oldingi bajarilmagan vazifalarni recovery oynasiga taqsimlaydi.
+
+        Masalan: 100 minutlik vazifa 5 kunlik recovery oynasiga tushsa:
+        20 + 20 + 20 + 20 + 20 minut.
+
+        Har kuni source task bazada pending bo'lib qoladi; shuning uchun
+        keyingi kunlarda uning navbatdagi ulushi ham avtomatik qo'shiladi.
+        """
+        today = today or datetime.now().date()
+        start = today - timedelta(days=7)
+        end = today.strftime("%Y-%m-%d")
+        pending = self.db.get_pending_plan_tasks(
+            start.strftime("%Y-%m-%d"), end
+        )
+
+        if not pending:
+            return {}
+
+        allocations = {}
+
+        for task in pending:
+            source_date = datetime.strptime(
+                task["date"], "%Y-%m-%d"
+            ).date()
+            elapsed = (today - source_date).days
+
+            # Faqat yaqinda qolgan darslar uchun recovery.
+            if elapsed < 1 or elapsed > window_days:
+                continue
+
+            minutes = int(
+                task.get("original_duration_minutes")
+                or task.get("duration_minutes")
+                or 0
+            )
+            if minutes <= 0:
+                continue
+
+            # 5 kunlik recovery oynasida teng taqsimlaymiz.
+            # Qoldiq minutlar birinchi kunlarga bittadan beriladi.
+            base = minutes // window_days
+            remainder = minutes % window_days
+            share = base + (1 if elapsed <= remainder else 0)
+
+            skill = task["skill"].lower()
+            allocations[skill] = allocations.get(skill, 0) + share
+
+        return allocations
+
     def update_daily_tasks(self, goal_plan):
         """
-        Bazadagi kunlik planni yangilash
+        Bugungi reja hali mavjud bo'lmasa yaratadi.
+
+        Agar oldingi 1-2 kunning vazifalari bajarilmay qolgan bo'lsa,
+        ularning yuklamasini keyingi 5 kunlik oynaga bo'lib, bugungi
+        vazifalarga faqat bugungi ulushini qo'shadi.
         """
         if not goal_plan or goal_plan.get("achieved"):
             return
 
-        tasks = []
-        daily = goal_plan.get("daily_plan", {})
+        # Bugungi reja allaqachon yaratilgan bo'lsa, uni qayta yozmaymiz.
+        if self.db.get_today_plan():
+            return self.db.get_today_plan()
 
-        skill_task_map = {
-            "speaking":   "practice",
-            "writing":    "essay",
-            "listening":  "practice",
-            "reading":    "practice",
-            "vocabulary": "review"
-        }
+        tasks = self._build_base_tasks(goal_plan)
+        carry = self._calculate_carryover()
 
-        for skill, minutes in daily.items():
-            tasks.append({
-                "skill": skill.title(),
-                "task_type": skill_task_map.get(
-                    skill, "practice"
-                ),
-                "duration": minutes
-            })
+        if carry:
+            for task in tasks:
+                skill = task["skill"].lower()
+                extra = int(carry.get(skill, 0))
+                if extra > 0:
+                    task["duration"] += extra
+                    # Agar foydalanuvchi bugungi yuklamani ham o'tkazib yuborsa,
+                    # keyingi recovery aynan bugungi to'liq yuklama bo'yicha bo'ladi.
+                    task["original_duration_minutes"] = task["duration"]
+                    task["carryover_minutes"] = extra
+                    task["carryover_source_date"] = datetime.now().date().isoformat()
+
+            print(
+                "♻️ Carry-over: "
+                + ", ".join(f"{k} +{v} min" for k, v in carry.items())
+            )
 
         self.db.create_daily_plan(tasks)
-        return tasks
+        return self.db.get_today_plan()
 
     # ── PROGRESS TEKSHIRISH ──────────────────────────────────
 

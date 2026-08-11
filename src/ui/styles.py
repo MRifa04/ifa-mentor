@@ -286,5 +286,6 @@ SKILL_ICONS = {
     "Mock Exams": "🎓",
     "Progress":   "📊",
     "Statistics": "📈",
-    "Settings":   "⚙️"
+    "Settings":   "⚙️",
+    "Maqsad": "🎯"
 }

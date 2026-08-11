@@ -26,42 +26,74 @@ class Sidebar(QWidget):
             'border-bottom:1px solid #1E293B;'
         )
         ll = QVBoxLayout(logo_frame)
-        ll.setContentsMargins(20, 24, 20, 16)
+        ll.setContentsMargins(20, 20, 20, 16)
+        ll.setSpacing(4)
         logo = QLabel('IFA MENTOR')
         logo.setStyleSheet(
-            'font-size:16px;font-weight:bold;'
+            'font-size:20px;font-weight:bold;'
             'color:#F1F5F9;border:none;'
+            'letter-spacing:2px;'
         )
         sub = QLabel('AI English Coach')
         sub.setStyleSheet(
-            'font-size:10px;color:#3B82F6;border:none;'
+            'font-size:12px;color:#3B82F6;border:none;'
         )
         ll.addWidget(logo)
         ll.addWidget(sub)
         layout.addWidget(logo_frame)
+
         nav_w = QWidget()
         nav_w.setStyleSheet('background:transparent;')
         nav_l = QVBoxLayout(nav_w)
-        nav_l.setContentsMargins(0, 12, 0, 12)
-        nav_l.setSpacing(2)
-        pages = [
-            'Home', 'Study DNA', 'Reading',
-            'Listening', 'Speaking', 'Writing',
-            'Vocabulary', 'Library', 'Mock Exams',
-            'Progress', 'Statistics', 'Settings'
+        nav_l.setContentsMargins(8, 16, 8, 16)
+        nav_l.setSpacing(4)
+
+        groups = [
+            {"label": "ASOSIY",
+             "pages": ["Home", "Study DNA", "Maqsad"]},
+            {"label": "SKILLLAR",
+             "pages": ["Reading", "Listening",
+                       "Speaking", "Writing", "Vocabulary"]},
+            {"label": "IMTIHON",
+             "pages": ["Library", "Mock Exams"]},
+            {"label": "TAHLIL",
+             "pages": ["Progress", "Statistics"]},
+            {"label": "SOZLAMA",
+             "pages": ["Settings"]},
         ]
-        for page in pages:
-            icon = SKILL_ICONS.get(page, 'o')
-            btn = QPushButton(f'  {icon}  {page}')
-            btn.setFixedHeight(38)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet(self._style(False))
-            btn.clicked.connect(
-                lambda chk, p=page: self._nav(p)
+
+        for group in groups:
+            grp_lbl = QLabel(group["label"])
+            grp_lbl.setStyleSheet(
+                'color:#334155;font-size:10px;'
+                'font-weight:bold;letter-spacing:1px;'
+                'border:none;padding:4px 12px 2px 12px;'
             )
-            self.nav_buttons[page] = btn
-            nav_l.addWidget(btn)
+            nav_l.addWidget(grp_lbl)
+
+            for page in group["pages"]:
+                icon = SKILL_ICONS.get(page, '○')
+                btn = QPushButton(f' {icon}   {page}')
+                btn.setFixedHeight(44)
+                btn.setCursor(
+                    Qt.CursorShape.PointingHandCursor
+                )
+                btn.setStyleSheet(self._style(False))
+                btn.clicked.connect(
+                    lambda chk, p=page: self._nav(p)
+                )
+                self.nav_buttons[page] = btn
+                nav_l.addWidget(btn)
+
+            spacer = QFrame()
+            spacer.setFixedHeight(8)
+            spacer.setStyleSheet(
+                'background:transparent;border:none;'
+            )
+            nav_l.addWidget(spacer)
+
         nav_l.addStretch()
+
         sc = QScrollArea()
         sc.setWidget(nav_w)
         sc.setWidgetResizable(True)
@@ -72,16 +104,37 @@ class Sidebar(QWidget):
             'QScrollArea{border:none;background:transparent;}'
         )
         layout.addWidget(sc)
+
         uf = QFrame()
-        uf.setStyleSheet('border-top:1px solid #1E293B;')
+        uf.setStyleSheet(
+            'border-top:1px solid #1E293B;'
+            'background:#0F172A;'
+        )
         ul = QHBoxLayout(uf)
-        ul.setContentsMargins(16, 12, 16, 12)
-        av = QLabel('👤')
-        av.setStyleSheet('font-size:22px;border:none;')
+        ul.setContentsMargins(16, 14, 16, 14)
+        ul.setSpacing(12)
+
+        av_frame = QFrame()
+        av_frame.setFixedSize(40, 40)
+        av_frame.setStyleSheet(
+            'background:#1E3A5F;'
+            'border-radius:20px;border:none;'
+        )
+        av_l = QVBoxLayout(av_frame)
+        av_l.setContentsMargins(0, 0, 0, 0)
+        av = QLabel('I')
+        av.setStyleSheet(
+            'font-size:16px;font-weight:bold;'
+            'color:#3B82F6;border:none;'
+        )
+        av.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        av_l.addWidget(av)
+
         il = QVBoxLayout()
+        il.setSpacing(2)
         nl = QLabel(USER_NAME)
         nl.setStyleSheet(
-            'font-size:13px;font-weight:bold;'
+            'font-size:14px;font-weight:bold;'
             'color:#F1F5F9;border:none;'
         )
         lv = QLabel('B1 → B2')
@@ -90,9 +143,18 @@ class Sidebar(QWidget):
         )
         il.addWidget(nl)
         il.addWidget(lv)
-        il.setSpacing(2)
-        ul.addWidget(av)
+
+        ul.addWidget(av_frame)
         ul.addLayout(il)
+        ul.addStretch()
+
+        badge = QLabel('B1')
+        badge.setStyleSheet(
+            'background:#1E3A5F;color:#3B82F6;'
+            'border-radius:6px;padding:3px 8px;'
+            'font-size:12px;font-weight:bold;border:none;'
+        )
+        ul.addWidget(badge)
         layout.addWidget(uf)
 
     def _style(self, active):
@@ -102,16 +164,17 @@ class Sidebar(QWidget):
                 'background:#1E3A5F;color:#3B82F6;'
                 'border:none;'
                 'border-left:3px solid #3B82F6;'
-                'border-radius:8px;padding:8px 16px;'
-                'text-align:left;font-size:13px;'
-                'font-weight:bold;margin:1px 8px;}'
+                'border-radius:8px;'
+                'padding:10px 16px;'
+                'text-align:left;font-size:14px;'
+                'font-weight:bold;}'
             )
         return (
             'QPushButton{'
             'background:transparent;color:#94A3B8;'
             'border:none;border-radius:8px;'
-            'padding:8px 16px;text-align:left;'
-            'font-size:13px;margin:1px 8px;}'
+            'padding:10px 16px;text-align:left;'
+            'font-size:14px;}'
             'QPushButton:hover{'
             'background:#1E293B;color:#F1F5F9;}'
         )
@@ -151,6 +214,7 @@ class MainWindow(QMainWindow):
         self.stack.setStyleSheet('background:#0A0F1E;')
         self._load_pages()
         self.sidebar = Sidebar(self._navigate)
+        self.sidebar.setFixedWidth(240)
         layout.addWidget(self.sidebar)
         layout.addWidget(self.stack)
         self.sidebar.activate('Home')
@@ -168,54 +232,28 @@ class MainWindow(QMainWindow):
         from src.ui.mock_exams_widget import MockExamsWidget
         from src.ui.statistics_widget import StatisticsWidget
         from src.ui.library_widget import LibraryWidget
+        from src.ui.goal_widget import GoalWidget
 
-        dash = DashboardWidget(self.db, self.ai)
-        self.pages['Home'] = dash
-        self.stack.addWidget(dash)
+        pages_map = [
+            ('Home',       DashboardWidget),
+            ('Speaking',   SpeakingWidget),
+            ('Progress',   ProgressWidget),
+            ('Writing',    WritingWidget),
+            ('Vocabulary', VocabularyWidget),
+            ('Settings',   SettingsWidget),
+            ('Reading',    ReadingWidget),
+            ('Listening',  ListeningWidget),
+            ('Study DNA',  StudyDNAWidget),
+            ('Mock Exams', MockExamsWidget),
+            ('Statistics', StatisticsWidget),
+            ('Library',    LibraryWidget),
+            ('Maqsad',     GoalWidget),
+        ]
 
-        sp = SpeakingWidget(self.db, self.ai)
-        self.pages['Speaking'] = sp
-        self.stack.addWidget(sp)
-
-        pr = ProgressWidget(self.db, self.ai)
-        self.pages['Progress'] = pr
-        self.stack.addWidget(pr)
-
-        wr = WritingWidget(self.db, self.ai)
-        self.pages['Writing'] = wr
-        self.stack.addWidget(wr)
-
-        vb = VocabularyWidget(self.db, self.ai)
-        self.pages['Vocabulary'] = vb
-        self.stack.addWidget(vb)
-
-        st = SettingsWidget(self.db, self.ai)
-        self.pages['Settings'] = st
-        self.stack.addWidget(st)
-
-        rd = ReadingWidget(self.db, self.ai)
-        self.pages['Reading'] = rd
-        self.stack.addWidget(rd)
-
-        ls = ListeningWidget(self.db, self.ai)
-        self.pages['Listening'] = ls
-        self.stack.addWidget(ls)
-
-        dna = StudyDNAWidget(self.db, self.ai)
-        self.pages['Study DNA'] = dna
-        self.stack.addWidget(dna)
-
-        mk = MockExamsWidget(self.db, self.ai)
-        self.pages['Mock Exams'] = mk
-        self.stack.addWidget(mk)
-
-        stat = StatisticsWidget(self.db, self.ai)
-        self.pages['Statistics'] = stat
-        self.stack.addWidget(stat)
-
-        lib = LibraryWidget(self.db, self.ai)
-        self.pages['Library'] = lib
-        self.stack.addWidget(lib)
+        for name, WidgetClass in pages_map:
+            w = WidgetClass(self.db, self.ai)
+            self.pages[name] = w
+            self.stack.addWidget(w)
 
     def _navigate(self, page):
         w = self.pages.get(page)

@@ -4,9 +4,12 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame,
     QScrollArea, QRadioButton,
-    QButtonGroup, QProgressBar, QSlider
+    QButtonGroup, QProgressBar, QSlider,
+    QTextEdit, QInputDialog,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
+
+from src.ui.daily_task import DailyTaskMixin
 
 
 class ListeningSignals(QObject):
@@ -355,14 +358,17 @@ class ListeningQuestionItem(QFrame):
         return is_correct
 
 
-class ListeningWidget(QWidget):
+class ListeningWidget(QWidget, DailyTaskMixin):
     def __init__(self, db, ai):
         super().__init__()
         self.db = db
         self.ai = ai
+        self.init_daily_task()
         self.signals = ListeningSignals()
         self.current_part = "Part3"
         self.question_items = []
+        self._mock_mode = False
+        self._mock_part_total = 0
         self.timer_seconds = 0
         self.session_timer = QTimer()
         self.session_timer.timeout.connect(self._tick)
@@ -379,7 +385,13 @@ class ListeningWidget(QWidget):
         self.signals.error.connect(self._show_error)
 
     def _build(self):
-        main = QHBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        self.attach_task_banner(outer)
+
+        content = QWidget()
+        main = QHBoxLayout(content)
         main.setContentsMargins(0, 0, 0, 0)
         main.setSpacing(0)
 
@@ -453,6 +465,32 @@ class ListeningWidget(QWidget):
         # Audio player
         self.audio_player = AudioPlayer()
         left_l.addWidget(self.audio_player)
+
+        script_title = QLabel("MATN / SKRIPT")
+        script_title.setStyleSheet(
+            "color:#8B5CF6;font-size:11px;"
+            "font-weight:bold;letter-spacing:1px;"
+        )
+        left_l.addWidget(script_title)
+
+        self.script_area = QTextEdit()
+        self.script_area.setReadOnly(True)
+        self.script_area.setPlaceholderText(
+            "Audio skripti yoki PDF matni shu yerda ko'rinadi..."
+        )
+        self.script_area.setMinimumHeight(140)
+        self.script_area.setStyleSheet("""
+            QTextEdit {
+                background:#131C31;
+                color:#CBD5E1;
+                border:1px solid #1E293B;
+                border-radius:8px;
+                padding:10px;
+                font-size:12px;
+                line-height:1.5;
+            }
+        """)
+        left_l.addWidget(self.script_area)
 
         # Eslatma
         note_frame = QFrame()
@@ -637,6 +675,7 @@ class ListeningWidget(QWidget):
 
         main.addWidget(left, 1)
         main.addWidget(right)
+        outer.addWidget(content, 1)
 
     # ── PART ────────────────────────────────────────────────
 
@@ -662,6 +701,106 @@ class ListeningWidget(QWidget):
         for p, b in self.part_btns.items():
             b.setStyleSheet(self._part_style(p == part))
         self.current_part = part
+        if self.mock_exam_task:
+            self._load_mock_part_content(part)
+
+    def _part_question_total(self, part):
+        totals = {
+            "Part1": 8, "Part2": 6, "Part3": 4,
+            "Part4": 5, "Part5": 6, "Part6": 6,
+        }
+        return totals.get(part, 5)
+
+    def _clear_q_layout(self):
+        while self.q_layout.count():
+            item = self.q_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.question_items = []
+
+    def _show_mock_part_text(self, text, part):
+        self._clear_q_layout()
+        self._mock_mode = True
+        self._mock_part_total = self._part_question_total(part)
+
+        if not text.strip():
+            err = QLabel("PDF dan savollar topilmadi")
+            err.setStyleSheet(
+                "color:#EF4444;font-size:12px;border:none;"
+            )
+            err.setWordWrap(True)
+            self.q_layout.addWidget(err)
+            self.q_layout.addStretch()
+            self.submit_btn.setEnabled(False)
+            return
+
+        badge = QLabel(f"📋 {part} — PDF savollar")
+        badge.setStyleSheet(
+            "background:#2D1B69;color:#C4B5FD;"
+            "border:none;border-radius:6px;"
+            "padding:4px 10px;font-size:11px;font-weight:bold;"
+        )
+        badge.setFixedHeight(24)
+        self.q_layout.addWidget(badge)
+
+        editor = QTextEdit()
+        editor.setReadOnly(True)
+        editor.setPlainText(text)
+        editor.setStyleSheet("""
+            QTextEdit {
+                background:#0F172A;
+                color:#E2E8F0;
+                border:1px solid #1E293B;
+                border-radius:8px;
+                padding:10px;
+                font-size:12px;
+            }
+        """)
+        self.q_layout.addWidget(editor, 1)
+
+        hint = QLabel(
+            "Audio tinglang va PDF savollariga javob bering"
+        )
+        hint.setStyleSheet(
+            "color:#64748B;font-size:11px;border:none;"
+        )
+        hint.setWordWrap(True)
+        self.q_layout.addWidget(hint)
+
+        total = self._mock_part_total
+        self.q_count_lbl.setText(f"0/{total}")
+        self.q_progress.setValue(0)
+        self.submit_btn.setEnabled(True)
+        self.result_frame.hide()
+
+    def _load_mock_part_content(self, part):
+        from src.mock_pdf_text import get_listening_part_from_pdf
+
+        task = self.mock_exam_task
+        if not task:
+            return
+
+        part_num = int(part.replace("Part", ""))
+        pdf = task.get("pdf_material") or {}
+        pdf_path = pdf.get("file_path", "")
+        part_text = get_listening_part_from_pdf(pdf_path, part_num)
+        self._show_mock_part_text(part_text, part)
+        if part_text.strip():
+            self.script_area.setPlainText(part_text)
+        else:
+            self.script_area.setPlainText(
+                "Skript yuklanmoqda... (Whisper yoki .txt fayl)"
+            )
+
+        audios = task.get("audio_files", [])
+        for audio in audios:
+            if (audio.get("part_order") or 0) == part_num:
+                self._load_mock_audio(audio, show_pdf=False)
+                break
+
+    def _show_script_text(self, text):
+        if text and text.strip():
+            self.script_area.setPlainText(text.strip())
 
     # ── MATERIAL YUKLASH ────────────────────────────────────
 
@@ -701,18 +840,20 @@ class ListeningWidget(QWidget):
         threading.Thread(target=run, daemon=True).start()
 
     def _get_transcript(self, path):
-        script = path.replace(
-            ".mp3", ".txt"
-        ).replace(".ogg", ".txt").replace(".wav", ".txt")
-        if os.path.exists(script):
-            with open(script, "r", encoding="utf-8") as f:
-                return f.read()
+        from src.listening import ListeningModule
+
         try:
-            import whisper
-            model = whisper.load_model("base")
-            result = model.transcribe(path, language="en")
-            return result["text"]
+            module = ListeningModule(self.db, self.ai)
+            return module.get_transcript(path) or ""
         except Exception:
+            script = path.replace(
+                ".mp3", ".txt"
+            ).replace(".m4a", ".txt").replace(
+                ".ogg", ".txt"
+            ).replace(".wav", ".txt")
+            if os.path.exists(script):
+                with open(script, "r", encoding="utf-8") as f:
+                    return f.read()
             return ""
 
     # ── AI SAVOLLAR ─────────────────────────────────────────
@@ -777,6 +918,10 @@ class ListeningWidget(QWidget):
 
     def _on_transcript(self, transcript):
         if transcript:
+            self._show_script_text(transcript)
+        if self.mock_exam_task:
+            return
+        if transcript:
             self._generate_from_transcript(transcript)
 
     def _generate_from_transcript(self, transcript):
@@ -837,8 +982,9 @@ class ListeningWidget(QWidget):
         color = colors.get(level, "#94A3B8")
         badge = QLabel(f"{part} • {level}")
         badge.setStyleSheet(
-            f"background:{color}22;color:{color};"
-            f"border:1px solid {color}44;"
+            f"background:{color};"
+            f"color:#FFFFFF;"
+            f"border:none;"
             f"border-radius:6px;padding:3px 10px;"
             f"font-size:11px;font-weight:bold;"
         )
@@ -861,6 +1007,10 @@ class ListeningWidget(QWidget):
     # ── TEKSHIRISH ──────────────────────────────────────────
 
     def _submit(self):
+        if self._mock_mode:
+            self._submit_mock()
+            return
+
         self.submit_btn.setEnabled(False)
         self.session_timer.stop()
 
@@ -906,6 +1056,82 @@ class ListeningWidget(QWidget):
         self.db.update_progress(
             "listening", int(pct * 0.75)
         )
+        self.finish_skill_task(correct, total)
+
+    def _submit_mock(self):
+        total = self._mock_part_total or 5
+        part_label = self.current_part
+        part_idx = getattr(self, "_mock_part_index", 0) + 1
+        part_total = len(getattr(self, "_mock_part_orders", [1]))
+        correct, ok = QInputDialog.getInt(
+            self,
+            "Natija",
+            (
+                f"{part_label} ({part_idx}/{part_total})\n"
+                f"Nechta savol to'g'ri? (0-{total})"
+            ),
+            min(0, total // 2),
+            0,
+            total,
+        )
+        if not ok:
+            return
+
+        if not hasattr(self, "_mock_scores"):
+            self._mock_scores = []
+        self._mock_scores.append((correct, total, part_label))
+
+        self._mock_part_index = getattr(self, "_mock_part_index", 0) + 1
+        orders = getattr(self, "_mock_part_orders", [])
+        if self._mock_part_index < len(orders):
+            self.result_frame.hide()
+            self.submit_btn.setEnabled(True)
+            next_part = f"Part{orders[self._mock_part_index]}"
+            self._select_part(next_part)
+            return
+
+        total_correct = sum(item[0] for item in self._mock_scores)
+        total_q = sum(item[1] for item in self._mock_scores)
+        pct = int(total_correct / total_q * 100) if total_q else 0
+        if pct >= 60:
+            msg = "✅ Listening yakunlandi!"
+            color = "#10B981"
+        else:
+            msg = "⚠️ Yana mashq kerak"
+            color = "#F59E0B"
+
+        self.res_score.setText(
+            f"{total_correct}/{total_q} ({pct}%)"
+        )
+        self.res_score.setStyleSheet(
+            f"font-size:26px;font-weight:bold;color:{color};"
+        )
+        self.res_msg.setText(msg)
+        self.result_frame.show()
+        self.submit_btn.setEnabled(False)
+        self.session_timer.stop()
+        self.q_count_lbl.setText(f"{total_q}/{total_q}")
+        self.q_progress.setValue(100)
+
+        self.db.save_session(
+            skill="Listening",
+            score=total_correct,
+            max_score=total_q,
+            duration=self.timer_seconds // 60,
+            details={
+                "type": "mock_exam",
+                "parts": [
+                    {"part": p, "correct": c, "total": t}
+                    for c, t, p in self._mock_scores
+                ],
+            },
+        )
+        self.db.update_progress("listening", int(pct * 0.75))
+        self._mock_mode = False
+        self._mock_scores = []
+        self._mock_part_orders = []
+        self._mock_part_index = 0
+        self.finish_skill_task(total_correct, total_q)
 
     def _show_error(self, error):
         while self.q_layout.count():
@@ -926,5 +1152,71 @@ class ListeningWidget(QWidget):
         s = self.timer_seconds % 60
         self.session_timer_lbl.setText(f"{m:02d}:{s:02d}")
 
+    def apply_mock_exam_task(self, task):
+        DailyTaskMixin.apply_mock_exam_task(self, task)
+        if not task:
+            return
+
+        audios = task.get("audio_files", [])
+        part_orders = []
+        for audio in sorted(
+            audios,
+            key=lambda item: item.get("part_order") or 0,
+        ):
+            part = audio.get("part_order")
+            if part and part not in part_orders:
+                part_orders.append(part)
+
+        if not part_orders:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                "Audio yo'q",
+                "Bu mock to'plamda listening audio topilmadi.",
+            )
+            self.finish_skill_task(0, 35)
+            return
+
+        self._mock_part_orders = part_orders
+        self._mock_part_index = 0
+        self._mock_scores = []
+        self._mock_mode = True
+        self.result_frame.hide()
+        self._select_part(f"Part{part_orders[0]}")
+
+    def _load_mock_audio(self, material, show_pdf=True):
+        path = material.get("file_path", "")
+        title = material.get("title", "Mock Audio")
+        if not path or not os.path.exists(path):
+            self.signals.error.emit("Audio fayl topilmadi")
+            return
+        self.audio_player.load_audio(path, title)
+
+        if show_pdf:
+            self._load_mock_part_content(self.current_part)
+
+        def run():
+            try:
+                transcript = self._get_transcript(path)
+                self.signals.transcript_ready.emit(transcript)
+            except Exception as e:
+                self.signals.error.emit(str(e))
+
+        threading.Thread(target=run, daemon=True).start()
+        self.session_timer_lbl.setText("00:00")
+        self.timer_seconds = 0
+        self.session_timer.start(1000)
+
     def refresh(self):
-        pass
+        if self.mock_exam_task and self._task_banner_label:
+            task = self.mock_exam_task
+            title = task.get("mock_title", "Mock")
+            skill = task.get("skill", "")
+            step = task.get("step", 1)
+            total = task.get("total_steps", 4)
+            self._task_banner_label.setText(
+                f"🎓 Mock: {title} — {skill} ({step}/{total})"
+            )
+            self._task_banner.show()
+        elif self.daily_task and self._task_banner_label:
+            self.apply_daily_task(self.daily_task)

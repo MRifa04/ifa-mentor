@@ -7,6 +7,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
 
+from src.ui.daily_task import DailyTaskMixin
+
 
 class VocabSignals(QObject):
     word_added = pyqtSignal(dict)
@@ -144,11 +146,12 @@ class FlashCard(QFrame):
             """)
 
 
-class VocabularyWidget(QWidget):
+class VocabularyWidget(QWidget, DailyTaskMixin):
     def __init__(self, db, ai):
         super().__init__()
         self.db = db
         self.ai = ai
+        self.init_daily_task()
         self.signals = VocabSignals()
         self.review_words = []
         self.current_index = 0
@@ -162,7 +165,13 @@ class VocabularyWidget(QWidget):
         self.signals.error.connect(self._on_error)
 
     def _build(self):
-        main = QHBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        self.attach_task_banner(outer)
+
+        content = QWidget()
+        main = QHBoxLayout(content)
         main.setContentsMargins(0, 0, 0, 0)
         main.setSpacing(0)
 
@@ -495,6 +504,7 @@ class VocabularyWidget(QWidget):
 
         main.addWidget(left, 1)
         main.addWidget(right)
+        outer.addWidget(content, 1)
 
         self.refresh()
 
@@ -586,6 +596,11 @@ class VocabularyWidget(QWidget):
                 "total": total
             }
         )
+        self.db.update_progress(
+            "vocabulary",
+            int(pct * 0.75),
+        )
+        self.complete_daily_task(int(pct * 0.75))
         self.refresh()
 
     def _restart_review(self):

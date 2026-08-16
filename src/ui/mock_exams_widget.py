@@ -1,20 +1,11 @@
-import threading
+import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame,
     QScrollArea, QProgressBar
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
+from PyQt6.QtCore import Qt, QTimer
 from config.settings import CEFR_LEVELS
-
-
-class MockSignals(QObject):
-    exam_started = pyqtSignal(str)
-    progress_update = pyqtSignal(str, int)
-    exam_complete = pyqtSignal(dict)
-    error = pyqtSignal(str)
-
-
 class ExamCard(QFrame):
     def __init__(self, title, duration,
                  questions, level, color,
@@ -43,9 +34,10 @@ class ExamCard(QFrame):
         )
         level_lbl = QLabel(level)
         level_lbl.setStyleSheet(
-            f"background:{color}22;color:{color};"
-            f"border:1px solid {color}44;"
-            f"border-radius:6px;padding:2px 8px;"
+            f"background:{color};"
+            f"color:#FFFFFF;"
+            f"border:none;"
+            f"border-radius:6px;padding:3px 10px;"
             f"font-size:11px;font-weight:bold;"
         )
         header.addWidget(icon_lbl)
@@ -95,30 +87,16 @@ class ExamCard(QFrame):
 
 
 class MockExamsWidget(QWidget):
-    def __init__(self, db, ai):
+    def __init__(self, db, ai, on_start_mock=None):
         super().__init__()
         self.db = db
         self.ai = ai
-        self.signals = MockSignals()
+        self.on_start_mock = on_start_mock
         self.is_running = False
         self.timer = QTimer()
         self.timer.timeout.connect(self._tick)
         self.elapsed = 0
-        self._connect_signals()
         self._build()
-
-    def _connect_signals(self):
-        self.signals.exam_started.connect(
-            self._on_exam_started
-        )
-        self.signals.progress_update.connect(
-            self._on_progress
-        )
-        self.signals.exam_complete.connect(
-            self._on_complete
-        )
-        self.signals.error.connect(self._on_error)
-
     def _build(self):
         main = QVBoxLayout(self)
         main.setContentsMargins(0, 0, 0, 0)
@@ -426,14 +404,12 @@ class MockExamsWidget(QWidget):
             "Listening":  "#8B5CF6",
             "Speaking":   "#3B82F6",
             "Writing":    "#C084FC",
-            "Vocabulary": "#4ADE80"
         }
         skill_icons = {
             "Reading":    "📖",
             "Listening":  "🎧",
             "Speaking":   "🎤",
             "Writing":    "✍️",
-            "Vocabulary": "📚"
         }
 
         for row in rows:
@@ -502,90 +478,64 @@ class MockExamsWidget(QWidget):
     def _start_single(self, skill):
         if self.is_running:
             return
-        self.is_running = True
-        self.elapsed = 0
-        self.timer.start(1000)
-        self.status_frame.show()
-        self.status_title.setText(
-            f"{skill.title()} imtihoni ketmoqda..."
-        )
-        self.current_skill_lbl.setText(
-            f"🔄 {skill.title()} yuklanmoqda..."
-        )
-        self.exam_progress.setValue(10)
-
-        def run():
-            try:
-                self.signals.exam_started.emit(skill)
-            except Exception as e:
-                self.signals.error.emit(str(e))
-
-        threading.Thread(target=run, daemon=True).start()
+        if not self.on_start_mock:
+            return
+        self.on_start_mock("single", skill)
 
     def _start_full(self):
         if self.is_running:
             return
+        if not self.on_start_mock:
+            return
+        self.on_start_mock("full")
+
+    def begin_session(self, title, skill=None, step=1, total=4):
         self.is_running = True
         self.elapsed = 0
         self.timer.start(1000)
         self.status_frame.show()
-        self.status_title.setText(
-            "To'liq Mock Imtihon ketmoqda..."
+        if skill:
+            self.status_title.setText(f"{skill} imtihoni ketmoqda...")
+            self.current_skill_lbl.setText(
+                f"🔄 {skill} ({step}/{total}) — {title}"
+            )
+        else:
+            self.status_title.setText("To'liq Mock Imtihon ketmoqda...")
+            self.current_skill_lbl.setText(title)
+        pct = int(((step - 1) / total) * 100) if total else 0
+        self.exam_progress.setValue(max(pct, 5))
+
+    def on_skill_complete(self, skill, score, max_score, step, total):
+        self.current_skill_lbl.setText(
+            f"✅ {skill}: {score}/{max_score} ({step}/{total})"
         )
-        self.exam_progress.setValue(5)
+        pct = int((step / total) * 100) if total else 100
+        self.exam_progress.setValue(pct)
 
-        def run():
-            try:
-                skills = [
-                    "Listening", "Reading",
-                    "Writing", "Speaking"
-                ]
-                for i, skill in enumerate(skills):
-                    self.signals.progress_update.emit(
-                        skill,
-                        int((i / len(skills)) * 100)
-                    )
-                self.signals.exam_complete.emit({
-                    "type": "full",
-                    "skills": skills
-                })
-            except Exception as e:
-                self.signals.error.emit(str(e))
-
-        threading.Thread(target=run, daemon=True).start()
+    def show_results(self, results, title="Mock Imtihon"):
+        self.is_running = False
+        self.timer.stop()
+        self.status_title.setText("✅ Imtihon tugadi!")
+        lines = []
+        for skill, data in results.items():
+            score = data.get("score", 0)
+            max_score = data.get("max_score", 75)
+            lines.append(f"{skill}: {score}/{max_score}")
+        self.current_skill_lbl.setText(
+            " | ".join(lines) if lines else title
+        )
+        self.exam_progress.setValue(100)
+        self._load_history()
 
     def _stop_exam(self):
         self.is_running = False
         self.timer.stop()
         self.status_frame.hide()
         self.exam_progress.setValue(0)
-
-    def _on_exam_started(self, skill):
-        self.current_skill_lbl.setText(
-            f"✅ {skill.title()} tayyor — Boshlang!"
-        )
-        self.exam_progress.setValue(50)
-
-    def _on_progress(self, skill, pct):
-        self.current_skill_lbl.setText(
-            f"🔄 {skill} bajarilmoqda..."
-        )
-        self.exam_progress.setValue(pct)
-
-    def _on_complete(self, data):
-        self.is_running = False
-        self.timer.stop()
-        self.status_title.setText("✅ Imtihon tugadi!")
-        self.current_skill_lbl.setText(
-            "Natijalarni pastda ko'ring"
-        )
-        self.exam_progress.setValue(100)
-        self._load_history()
-
-    def _on_error(self, error):
-        self.is_running = False
-        self.timer.stop()
-        self.status_title.setText(f"❌ Xato: {error[:50]}")
+        if self.on_start_mock:
+            parent = self.window()
+            if parent and hasattr(parent, "stop_mock_exam"):
+                parent.stop_mock_exam()
 
     def _tick(self):
         self.elapsed += 1

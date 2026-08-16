@@ -8,6 +8,7 @@ from PyQt6.QtGui import QIcon
 from src.database import Database
 from src.ai_engine import AIEngine
 from src.ui.main_window import MainWindow
+from src.user_profile import get_profile
 
 
 def main():
@@ -17,8 +18,9 @@ def main():
 
     db = Database()
     ai = AIEngine(db)
+    profile = get_profile(db)
 
-    window = MainWindow(db, ai)
+    window = MainWindow(db, ai, profile=profile)
     window.show()
 
     sys.exit(app.exec())

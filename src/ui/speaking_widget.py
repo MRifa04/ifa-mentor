@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 from PyQt6.QtGui import QFont
 from src.ui.styles import SKILL_COLORS
+from src.ui.daily_task import DailyTaskMixin
 
 class WorkerSignals(QObject):
     question_ready = pyqtSignal(dict)
@@ -98,11 +99,12 @@ class ScoreRow(QFrame):
         layout.addWidget(score_lbl)
 
 
-class SpeakingWidget(QWidget):
+class SpeakingWidget(QWidget, DailyTaskMixin):
     def __init__(self, db, ai):
         super().__init__()
         self.db = db
         self.ai = ai
+        self.init_daily_task()
         self.signals = WorkerSignals()
         self.current_part = "Part1"
         self.is_recording = False
@@ -122,7 +124,13 @@ class SpeakingWidget(QWidget):
         self.signals.error.connect(self._show_error)
 
     def _build(self):
-        main = QHBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        self.attach_task_banner(outer)
+
+        content = QWidget()
+        main = QHBoxLayout(content)
         main.setContentsMargins(0, 0, 0, 0)
         main.setSpacing(0)
 
@@ -424,6 +432,8 @@ class SpeakingWidget(QWidget):
         main.addWidget(left, 1)
         main.addWidget(right)
 
+        outer.addWidget(content, 1)
+
         # Default Part1
         self._select_part("Part1", self.part_btns["Part1"])
 
@@ -649,6 +659,7 @@ class SpeakingWidget(QWidget):
         self.question_lbl.setStyleSheet(
             "color: #10B981; font-size: 15px; font-weight: bold;"
         )
+        self.finish_skill_task(int(avg), 100)
 
     def _show_error(self, error):
         self.status_lbl.setText(f"❌ Xato: {error}")
@@ -668,5 +679,46 @@ class SpeakingWidget(QWidget):
             "color: #F59E0B; font-size: 12px; line-height: 1.5;"
         )
 
+    def apply_mock_exam_task(self, task):
+        DailyTaskMixin.apply_mock_exam_task(self, task)
+        if not task:
+            return
+        pdf = task.get("pdf_material")
+        if pdf:
+            self._start_mock_speaking(pdf)
+        else:
+            self._select_part("Part3", self.part_btns["Part3"])
+
+    def _start_mock_speaking(self, material):
+        from src.mock_pdf_text import get_speaking_from_pdf
+
+        prompt = get_speaking_from_pdf(material.get("file_path", ""))
+        if prompt.strip():
+            self.feedback_lbl.setText(prompt[:1200])
+            self.feedback_lbl.setStyleSheet(
+                "color:#CBD5E1;font-size:12px;line-height:1.5;"
+            )
+        self._select_part("Part3", self.part_btns["Part3"])
+
+    def apply_daily_task(self, task):
+        super().apply_daily_task(task)
+        if not task:
+            return
+        if task.get("task_type") == "mock":
+            self._select_part("Part3", self.part_btns["Part3"])
+        else:
+            self._select_part("Part1", self.part_btns["Part1"])
+
     def refresh(self):
-        pass
+        if self.mock_exam_task and self._task_banner_label:
+            task = self.mock_exam_task
+            title = task.get("mock_title", "Mock")
+            skill = task.get("skill", "")
+            step = task.get("step", 1)
+            total = task.get("total_steps", 4)
+            self._task_banner_label.setText(
+                f"🎓 Mock: {title} — {skill} ({step}/{total})"
+            )
+            self._task_banner.show()
+        elif self.daily_task and self._task_banner_label:
+            self.apply_daily_task(self.daily_task)

@@ -1,7 +1,34 @@
-﻿.env
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
 __pycache__/
-*.pyc
-*.pyo
-database/ifa_mentor.db
-src/__pycache__/
-config/__pycache__/
+*.py[cod]
+*$py.class
+
+# Database
+database/*.db
+database/*.sqlite
+database/*.sqlite3
+
+# Large learning materials
+database/materials/
+database/materials_backup/
+
+# User-generated / local data
+database/telegram.session
+database/speaking/
+database/reports/
+
+# Logs
+logs/
+*.log
+
+# IDE / OS
+.vscode/
+.idea/
+.cursor/
+.DS_Store
+Thumbs.db

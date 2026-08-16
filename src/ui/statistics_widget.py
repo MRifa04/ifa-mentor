@@ -5,7 +5,9 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPainter, QColor, QPen
-from config.settings import CURRENT_SCORES, CEFR_LEVELS
+from config.settings import CEFR_LEVELS, TARGET_LEVEL
+from src.user_profile import get_profile
+from src.scores import get_current_scores, EXAM_SKILL_DISPLAY
 from datetime import datetime, timedelta
 
 
@@ -183,9 +185,29 @@ class StatisticsWidget(QWidget):
         super().__init__()
         self.db = db
         self.ai = ai
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
         self._build()
 
+    def _current_level_label(self, overall):
+        for level, bounds in CEFR_LEVELS.items():
+            low, high = bounds
+            if low <= overall <= high:
+                return level
+        return "B1"
+
     def _build(self):
+        self.profile = get_profile(self.db)
+        target_level = self.profile.get(
+            "target_level",
+            TARGET_LEVEL,
+        )
+        user_name = self.profile.get("name", "User")
+        current_level = self.profile.get(
+            "current_level",
+            "B1",
+        )
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(
@@ -203,7 +225,10 @@ class StatisticsWidget(QWidget):
         title.setStyleSheet(
             "font-size:22px;font-weight:bold;color:#F1F5F9;"
         )
-        sub = QLabel("To'liq o'qish statistikasi va tahlili")
+        sub = QLabel(
+            f"{user_name} — {current_level} → {target_level} | "
+            "To'liq o'qish statistikasi"
+        )
         sub.setStyleSheet("color:#94A3B8;font-size:13px;")
         layout.addWidget(title)
         layout.addWidget(sub)
@@ -272,12 +297,18 @@ class StatisticsWidget(QWidget):
 
         self.db.close()
 
+        scores = get_current_scores(self.db)
+
         # ── Katta statistika kartalar ──
         big_grid = QGridLayout()
         big_grid.setSpacing(12)
 
-        overall = CURRENT_SCORES["overall"]
-        gap = max(0, CEFR_LEVELS["B2"][0] - overall)
+        overall = scores["overall"]
+        gap = max(
+            0,
+            CEFR_LEVELS.get(target_level, (51, 64))[0] - overall,
+        )
+        level_label = self._current_level_label(overall)
 
         big_cards = [
             (
@@ -290,10 +321,10 @@ class StatisticsWidget(QWidget):
             ),
             (
                 "Overall Ball", f"{overall}/75",
-                "Hozirgi daraja: B1", "#10B981", "🎯"
+                f"Hozirgi daraja: {level_label}", "#10B981", "🎯"
             ),
             (
-                "B2 ga qoldi", f"+{gap}",
+                f"{target_level} ga qoldi", f"+{gap}",
                 "ball kerak", "#EF4444", "⚡"
             ),
             (
@@ -332,10 +363,8 @@ class StatisticsWidget(QWidget):
         skill_l.addWidget(skill_title)
 
         skill_data = [
-            ("Reading",   CURRENT_SCORES["reading"],   "#10B981"),
-            ("Listening", CURRENT_SCORES["listening"], "#8B5CF6"),
-            ("Speaking",  CURRENT_SCORES["speaking"],  "#3B82F6"),
-            ("Writing",   CURRENT_SCORES["writing"],   "#C084FC"),
+            (label, scores[key], color)
+            for key, label, color in EXAM_SKILL_DISPLAY
         ]
 
         for skill, score, color in skill_data:
@@ -433,7 +462,7 @@ class StatisticsWidget(QWidget):
         road_l.setContentsMargins(20, 18, 20, 18)
         road_l.setSpacing(12)
 
-        road_title = QLabel("B2 YO'L XARITASI")
+        road_title = QLabel(f"{target_level} YO'L XARITASI")
         road_title.setStyleSheet(
             "color:#10B981;font-size:11px;"
             "font-weight:bold;letter-spacing:1px;"
@@ -441,7 +470,9 @@ class StatisticsWidget(QWidget):
         road_l.addWidget(road_title)
 
         overall_lbl = QLabel(
-            f"Overall: {overall}/75 — B2 uchun 51 kerak"
+            f"Overall: {overall}/75 — "
+            f"{target_level} uchun "
+            f"{CEFR_LEVELS.get(target_level, (51,))[0]} kerak"
         )
         overall_lbl.setStyleSheet(
             "color:#F1F5F9;font-size:14px;"
@@ -478,7 +509,7 @@ class StatisticsWidget(QWidget):
         mile_row = QHBoxLayout()
         for level, mn, mx, color in milestones:
             is_cur = mn <= overall <= mx
-            is_tgt = level == "B2"
+            is_tgt = level == target_level
             m_frame = QFrame()
             m_frame.setStyleSheet(f"""
                 QFrame {{
@@ -538,7 +569,7 @@ class StatisticsWidget(QWidget):
             datetime.now() + timedelta(days=days_needed)
         ).strftime("%d.%m.%Y")
         eta_lbl = QLabel(
-            f"🎯 B2 ga taxminiy sana: {eta} "
+            f"🎯 {target_level} ga taxminiy sana: {eta} "
             f"(+{days_needed} kun)"
         )
         eta_lbl.setStyleSheet(
@@ -550,9 +581,7 @@ class StatisticsWidget(QWidget):
         layout.addStretch()
 
         scroll.setWidget(content)
-        main_l = QVBoxLayout(self)
-        main_l.setContentsMargins(0, 0, 0, 0)
-        main_l.addWidget(scroll)
+        self.main_layout.addWidget(scroll)
 
     def _calc_streak(self, dates):
         if not dates:
@@ -573,4 +602,9 @@ class StatisticsWidget(QWidget):
         return streak
 
     def refresh(self):
-        pass
+        while self.main_layout.count():
+            item = self.main_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        self._build()

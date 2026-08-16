@@ -282,6 +282,7 @@ SKILL_ICONS = {
     "Speaking":   "🎤",
     "Writing":    "✍️",
     "Vocabulary": "📚",
+    "Tenses":     "⏱",
     "Library":    "🗂️",
     "Mock Exams": "🎓",
     "Progress":   "📊",

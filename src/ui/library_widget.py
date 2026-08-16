@@ -4,14 +4,16 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame,
     QScrollArea, QLineEdit, QComboBox,
-    QFileDialog, QGridLayout
+    QFileDialog, QGridLayout, QInputDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
+from src.telegram_grouping import group_materials_for_library
 
 
 class LibrarySignals(QObject):
     materials_loaded = pyqtSignal(list)
     material_added = pyqtSignal()
+    review_loaded = pyqtSignal(int)
     error = pyqtSignal(str)
 
 
@@ -31,6 +33,9 @@ class MaterialCard(QFrame):
             "writing":    "#C084FC",
             "speaking":   "#3B82F6",
             "vocabulary": "#4ADE80",
+            "grammar":    "#F472B6",
+            "tenses":     "#FB923C",
+            "mock":       "#EF4444",
             "mixed":      "#F59E0B"
         }
         type_icons = {
@@ -38,6 +43,7 @@ class MaterialCard(QFrame):
             "pdf":   "📄",
             "txt":   "📝",
             "test":  "📋",
+            "text":  "💬",
             "other": "📁"
         }
         color = skill_colors.get(skill, "#94A3B8")
@@ -82,8 +88,9 @@ class MaterialCard(QFrame):
 
         skill_badge = QLabel(skill.upper())
         skill_badge.setStyleSheet(
-            f"background:{color}22;color:{color};"
-            f"border:1px solid {color}44;"
+            f"background:{color};"
+            f"color:#FFFFFF;"
+            f"border:none;"
             f"border-radius:4px;padding:1px 6px;"
             f"font-size:10px;font-weight:bold;"
         )
@@ -116,6 +123,91 @@ class MaterialCard(QFrame):
             )
             layout.addWidget(ch_lbl)
 
+        preview = material.get("content_text") or ""
+        if preview and file_type == "text":
+            snippet = preview[:120] + ("..." if len(preview) > 120 else "")
+            preview_lbl = QLabel(snippet)
+            preview_lbl.setWordWrap(True)
+            preview_lbl.setStyleSheet(
+                "color:#64748B;font-size:10px;border:none;"
+            )
+            layout.addWidget(preview_lbl)
+
+
+class MaterialSetCard(QFrame):
+    """Mock to'plam: PDF + Part 1-6 audiolar tartibda."""
+
+    def __init__(self, set_data):
+        super().__init__()
+        title = set_data.get("title", "To'plam")
+        skill = set_data.get("skill", "mock")
+        level = set_data.get("level", "B2")
+        items = set_data.get("items", [])
+
+        skill_colors = {
+            "mock": "#EF4444",
+            "listening": "#8B5CF6",
+            "reading": "#10B981",
+            "mixed": "#F59E0B",
+        }
+        color = skill_colors.get(skill, "#3B82F6")
+
+        self.setStyleSheet(f"""
+            QFrame {{
+                background:#131C31;
+                border-radius:12px;
+                border:1px solid #1E293B;
+                border-left:4px solid {color};
+            }}
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
+
+        header = QHBoxLayout()
+        title_lbl = QLabel(f"📦  {title}")
+        title_lbl.setStyleSheet(
+            "color:#F1F5F9;font-size:14px;font-weight:bold;border:none;"
+        )
+        count_lbl = QLabel(
+            set_data.get("summary") or f"{len(items)} fayl"
+        )
+        count_lbl.setStyleSheet(
+            "color:#64748B;font-size:11px;border:none;"
+        )
+        skill_badge = QLabel(skill.upper())
+        skill_badge.setStyleSheet(
+            f"background:{color};color:#FFF;border:none;"
+            f"border-radius:4px;padding:2px 8px;font-size:10px;"
+        )
+        level_badge = QLabel(level)
+        level_badge.setStyleSheet(
+            "background:#1E293B;color:#94A3B8;border:none;"
+            "border-radius:4px;padding:2px 8px;font-size:10px;"
+        )
+        header.addWidget(title_lbl, 1)
+        header.addWidget(skill_badge)
+        header.addWidget(level_badge)
+        header.addWidget(count_lbl)
+        layout.addLayout(header)
+
+        for item in items:
+            ft = item.get("file_type", "")
+            role = item.get("material_role", "")
+            icon = {"pdf": "📄", "audio": "🎵", "txt": "📝"}.get(ft, "📁")
+            name = item.get("title", "")
+            part = item.get("part_order") or ""
+            part_txt = f"Part {part}" if part else ""
+            role_txt = f"[{role}] " if role else ""
+            row = QLabel(
+                f"  {icon}  {role_txt}{part_txt + ' — ' if part_txt else ''}{name}"
+            )
+            row.setStyleSheet(
+                "color:#CBD5E1;font-size:11px;border:none;padding:2px 0;"
+            )
+            layout.addWidget(row)
+
 
 class LibraryWidget(QWidget):
     def __init__(self, db, ai):
@@ -135,6 +227,7 @@ class LibraryWidget(QWidget):
         self.signals.material_added.connect(
             self.refresh
         )
+        self.signals.review_loaded.connect(self._on_review_loaded)
         self.signals.error.connect(self._on_error)
 
     def _build(self):
@@ -201,7 +294,8 @@ class LibraryWidget(QWidget):
             "Barcha skilllar",
             "listening", "reading",
             "writing", "speaking",
-            "vocabulary", "mixed"
+            "vocabulary", "grammar",
+            "tenses", "mock", "mixed"
         ])
         self.skill_filter.setFixedHeight(36)
         self.skill_filter.setFixedWidth(150)
@@ -227,7 +321,7 @@ class LibraryWidget(QWidget):
         self.type_filter = QComboBox()
         self.type_filter.addItems([
             "Barcha turlar",
-            "audio", "pdf", "txt", "test"
+            "audio", "pdf", "txt", "test", "text"
         ])
         self.type_filter.setFixedHeight(36)
         self.type_filter.setFixedWidth(130)
@@ -252,10 +346,25 @@ class LibraryWidget(QWidget):
             self._filter_materials
         )
 
+        self.view_filter = QComboBox()
+        self.view_filter.addItems([
+            "To'plamlar",
+            "Ro'yxat",
+        ])
+        self.view_filter.setFixedHeight(36)
+        self.view_filter.setFixedWidth(120)
+        self.view_filter.setStyleSheet(
+            self.skill_filter.styleSheet()
+        )
+        self.view_filter.currentTextChanged.connect(
+            self._filter_materials
+        )
+
         filter_row.addWidget(self.search_input, 1)
         filter_row.addWidget(self.skill_filter)
         filter_row.addWidget(self.type_filter)
         filter_row.addWidget(self.status_filter)
+        filter_row.addWidget(self.view_filter)
         header_l.addLayout(filter_row)
 
         # Stats row
@@ -278,6 +387,36 @@ class LibraryWidget(QWidget):
         self.stats_row.addWidget(self.used_lbl)
         self.stats_row.addStretch()
         header_l.addLayout(self.stats_row)
+
+        self.review_banner = QFrame()
+        self.review_banner.setStyleSheet("""
+            QFrame {
+                background:#2D1F0F;
+                border:1px solid #F59E0B;
+                border-radius:8px;
+            }
+        """)
+        review_l = QHBoxLayout(self.review_banner)
+        review_l.setContentsMargins(12, 8, 12, 8)
+        self.review_lbl = QLabel("Review queue: 0")
+        self.review_lbl.setStyleSheet(
+            "color:#FCD34D;font-size:12px;border:none;"
+        )
+        review_btn = QPushButton("Ko'rish")
+        review_btn.setFixedHeight(28)
+        review_btn.setStyleSheet("""
+            QPushButton {
+                background:#F59E0B;color:#1E293B;
+                border:none;border-radius:6px;
+                font-size:11px;font-weight:bold;padding:0 12px;
+            }
+            QPushButton:hover { background:#D97706; }
+        """)
+        review_btn.clicked.connect(self._show_review_queue)
+        review_l.addWidget(self.review_lbl, 1)
+        review_l.addWidget(review_btn)
+        header_l.addWidget(self.review_banner)
+        self.review_banner.hide()
 
         main.addWidget(header_w)
 
@@ -325,19 +464,52 @@ class LibraryWidget(QWidget):
     def refresh(self):
         def run():
             try:
-                conn = self.db.connect()
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT * FROM materials
-                    ORDER BY created_at DESC
-                """)
-                rows = [dict(r) for r in cursor.fetchall()]
-                self.db.close()
+                rows = self.db.get_all_materials()
+                review = self.db.get_mock_review_queue("pending")
                 self.signals.materials_loaded.emit(rows)
+                self.signals.review_loaded.emit(len(review))
             except Exception as e:
                 self.signals.error.emit(str(e))
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _on_review_loaded(self, count):
+        if count > 0:
+            self.review_lbl.setText(
+                f"Review queue: {count} ta mock tekshiruvi kerak"
+            )
+            self.review_banner.show()
+        else:
+            self.review_banner.hide()
+
+    def _show_review_queue(self):
+        items = self.db.get_mock_review_queue("pending")
+        if not items:
+            QMessageBox.information(
+                self, "Review", "Tekshiruv navbatida hech narsa yo'q."
+            )
+            return
+
+        lines = []
+        for item in items[:15]:
+            conf = int((item.get("confidence") or 0) * 100)
+            lines.append(
+                f"- {item.get('set_title')} ({conf}%): "
+                f"{item.get('reason', '')[:60]}"
+            )
+        text = "\n".join(lines)
+        if len(items) > 15:
+            text += f"\n... va yana {len(items) - 15} ta"
+
+        answer = QMessageBox.question(
+            self,
+            "Review Queue",
+            text + "\n\nBirinchi elementni tasdiqlash?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self.db.resolve_review_item(items[0]["id"], "approved")
+            self.refresh()
 
     def _show_materials(self, materials):
         self.all_materials = materials
@@ -356,7 +528,6 @@ class LibraryWidget(QWidget):
         self.used_lbl.setText(f"Ishlatilgan: {used}")
 
     def _render_materials(self, materials):
-        # Eski widgetlarni o'chirish
         while self.content_l.count():
             item = self.content_l.takeAt(0)
             if item.widget():
@@ -378,18 +549,52 @@ class LibraryWidget(QWidget):
             self.content_l.addStretch()
             return
 
-        # Grid layout
-        grid = QGridLayout()
-        grid.setSpacing(10)
+        view_mode = "sets"
+        if hasattr(self, "view_filter"):
+            view_mode = (
+                "sets"
+                if self.view_filter.currentText() == "To'plamlar"
+                else "list"
+            )
 
-        for i, material in enumerate(materials):
-            card = MaterialCard(material)
-            grid.addWidget(card, i // 3, i % 3)
+        if view_mode == "sets":
+            sets_list, standalone = group_materials_for_library(materials)
+            for set_data in sets_list:
+                card = MaterialSetCard(set_data)
+                self.content_l.addWidget(card)
 
-        grid_w = QWidget()
-        grid_w.setStyleSheet("background:transparent;")
-        grid_w.setLayout(grid)
-        self.content_l.addWidget(grid_w)
+            if standalone:
+                sep = QLabel("— Alohida fayllar —")
+                sep.setStyleSheet(
+                    "color:#475569;font-size:12px;border:none;"
+                    "padding:12px 0 4px 0;"
+                )
+                self.content_l.addWidget(sep)
+                grid = QGridLayout()
+                grid.setSpacing(10)
+                for i, material in enumerate(standalone):
+                    grid.addWidget(MaterialCard(material), i // 3, i % 3)
+                grid_w = QWidget()
+                grid_w.setStyleSheet("background:transparent;")
+                grid_w.setLayout(grid)
+                self.content_l.addWidget(grid_w)
+        else:
+            grid = QGridLayout()
+            grid.setSpacing(10)
+            visible = [
+                m for m in materials
+                if not (
+                    m.get("category") == "post"
+                    and m.get("file_type") == "text"
+                )
+            ]
+            for i, material in enumerate(visible):
+                grid.addWidget(MaterialCard(material), i // 3, i % 3)
+            grid_w = QWidget()
+            grid_w.setStyleSheet("background:transparent;")
+            grid_w.setLayout(grid)
+            self.content_l.addWidget(grid_w)
+
         self.content_l.addStretch()
 
     # ── FILTER ──────────────────────────────────────────────
@@ -407,6 +612,7 @@ class LibraryWidget(QWidget):
                 m for m in filtered
                 if search in m.get("title", "").lower()
                 or search in m.get("skill", "").lower()
+                or search in (m.get("set_title") or "").lower()
             ]
 
         if skill != "Barcha skilllar":
@@ -451,20 +657,41 @@ class LibraryWidget(QWidget):
         if not file_path:
             return
 
-        # Skill tanlash
-        skill_dialog = QWidget(self)
-        skill_dialog.setWindowFlags(
-            Qt.WindowType.Dialog
+        skill, ok = QInputDialog.getItem(
+            self,
+            "Skill tanlang",
+            "Material qaysi skill uchun?",
+            [
+                "reading",
+                "listening",
+                "writing",
+                "speaking",
+                "vocabulary",
+            ],
+            0,
+            False,
         )
+        if not ok:
+            return
+
+        level, ok = QInputDialog.getItem(
+            self,
+            "Daraja tanlang",
+            "CEFR darajasi:",
+            ["B1", "B2", "C1"],
+            1,
+            False,
+        )
+        if not ok:
+            return
 
         from src.telegram_loader import TelegramLoader
         loader = TelegramLoader(self.db)
 
-        # Fayl turini aniqlash
         filename = os.path.basename(file_path)
         file_type = loader.detect_file_type(filename)
-        skill = loader.detect_skill(filename)
-        level = loader.detect_level(filename)
+        if skill == "reading" and file_type not in ("pdf", "txt"):
+            skill = loader.detect_skill(filename)
 
         def run():
             try:

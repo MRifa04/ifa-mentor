@@ -7,17 +7,20 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 from config.settings import USER_NAME
 
+from src.ui.daily_task import DailyTaskMixin
+
 class WritingSignals(QObject):
     task_ready = pyqtSignal(dict)
     evaluating = pyqtSignal()
     result_ready = pyqtSignal(dict)
     error = pyqtSignal(str)
 
-class WritingWidget(QWidget):
+class WritingWidget(QWidget, DailyTaskMixin):
     def __init__(self, db, ai):
         super().__init__()
         self.db = db
         self.ai = ai
+        self.init_daily_task()
         self.signals = WritingSignals()
         self.current_task = None
         self.timer_seconds = 0
@@ -34,7 +37,13 @@ class WritingWidget(QWidget):
         self.signals.error.connect(self._show_error)
 
     def _build(self):
-        main = QHBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        self.attach_task_banner(outer)
+
+        content = QWidget()
+        main = QHBoxLayout(content)
         main.setContentsMargins(0, 0, 0, 0)
         main.setSpacing(0)
 
@@ -438,6 +447,7 @@ class WritingWidget(QWidget):
 
         main.addWidget(left, 1)
         main.addWidget(right)
+        outer.addWidget(content, 1)
 
         self.current_task_type = "formal_letter"
 
@@ -633,6 +643,14 @@ class WritingWidget(QWidget):
             duration=self.timer_seconds // 60,
             details=result
         )
+        self.db.update_progress(
+            "writing",
+            int(float(overall) * 15),
+        )
+        self.finish_skill_task(
+            int(float(overall) * 20),
+            100,
+        )
         self.timer.stop()
 
     def _show_error(self, error):
@@ -698,5 +716,49 @@ class WritingWidget(QWidget):
             f"color:{color};font-size:12px;font-weight:bold;"
         )
 
+    def apply_mock_exam_task(self, task):
+        DailyTaskMixin.apply_mock_exam_task(self, task)
+        if not task:
+            return
+        pdf = task.get("pdf_material")
+        if pdf:
+            self._start_mock_writing(pdf)
+
+    def _start_mock_writing(self, material):
+        from src.mock_pdf_text import get_writing_from_pdf
+
+        self.start_btn.setEnabled(False)
+        self.result_frame.hide()
+        self.submit_btn.setEnabled(True)
+        self.timer_seconds = 0
+        self.timer_limit = 40 * 60
+        self.timer.start(1000)
+
+        prompt = get_writing_from_pdf(material.get("file_path", ""))
+        if not prompt.strip():
+            prompt = (
+                "Mock imtihon Writing vazifasi.\n"
+                "PDF dan vazifa topilmadi — erkin essay yozing."
+            )
+
+        task = {
+            "instructions": prompt,
+            "points_to_cover": [],
+            "type": "mock_exam",
+        }
+        self.current_task_type = "argumentative_essay"
+        self._show_task(task)
+
     def refresh(self):
-        pass
+        if self.mock_exam_task and self._task_banner_label:
+            task = self.mock_exam_task
+            title = task.get("mock_title", "Mock")
+            skill = task.get("skill", "")
+            step = task.get("step", 1)
+            total = task.get("total_steps", 4)
+            self._task_banner_label.setText(
+                f"🎓 Mock: {title} — {skill} ({step}/{total})"
+            )
+            self._task_banner.show()
+        elif self.daily_task and self._task_banner_label:
+            self.apply_daily_task(self.daily_task)

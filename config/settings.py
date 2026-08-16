@@ -6,6 +6,8 @@ load_dotenv()
 # API Kalitlar
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_API_ID = os.getenv("TELEGRAM_API_ID", "")
+TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH", "")
 
 # Foydalanuvchi
 USER_NAME = "Ilhom"
@@ -19,6 +21,7 @@ CURRENT_SCORES = {
     "reading": 55,
     "writing": 43,
     "speaking": 35,
+    "vocabulary": 0,
     "overall": 46
 }
 
@@ -52,6 +55,7 @@ READING_RULES = {
 # Papkalar
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATABASE_DIR = os.path.join(BASE_DIR, "database")
+MATERIALS_DIR = r"D:\materials"
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
 

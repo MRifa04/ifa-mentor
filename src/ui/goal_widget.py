@@ -3,10 +3,17 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame,
     QScrollArea, QComboBox, QSlider,
-    QProgressBar, QGridLayout
+    QProgressBar, QGridLayout, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
-from config.settings import CURRENT_SCORES, CEFR_LEVELS
+from config.settings import CEFR_LEVELS
+from src.scores import (
+    get_current_scores,
+    EXAM_SKILL_DISPLAY,
+    EXAM_SKILLS,
+    EXAM_SKILL_NAMES,
+)
+from src.user_profile import get_profile
 
 
 class GoalSignals(QObject):
@@ -23,6 +30,7 @@ class GoalWidget(QWidget):
         self.current_plan = None
         self.signals.plan_ready.connect(self._show_plan)
         self.signals.error.connect(self._show_error)
+        self.profile = get_profile(db)
         self._build()
 
     def _build(self):
@@ -73,14 +81,16 @@ class GoalWidget(QWidget):
         scores_row = QGridLayout()
         scores_row.setSpacing(10)
 
+        scores = get_current_scores(self.db)
+
         skill_data = [
-            ("🎧 Listening", CURRENT_SCORES["listening"],
+            ("🎧 Listening", scores["listening"],
              "#8B5CF6"),
-            ("📖 Reading",   CURRENT_SCORES["reading"],
+            ("📖 Reading",   scores["reading"],
              "#10B981"),
-            ("🎤 Speaking",  CURRENT_SCORES["speaking"],
+            ("🎤 Speaking",  scores["speaking"],
              "#3B82F6"),
-            ("✍️ Writing",   CURRENT_SCORES["writing"],
+            ("✍️ Writing",   scores["writing"],
              "#C084FC"),
         ]
 
@@ -102,6 +112,7 @@ class GoalWidget(QWidget):
                 f"color:{color};font-size:11px;border:none;"
             )
             sc_l = QLabel(f"{score}/75")
+            sc_l.setObjectName("score_value")
             sc_l.setStyleSheet(
                 "color:#F1F5F9;font-size:16px;"
                 "font-weight:bold;border:none;"
@@ -128,10 +139,10 @@ class GoalWidget(QWidget):
         cur_l.addLayout(scores_row)
 
         # Overall
-        overall = CURRENT_SCORES["overall"]
+        overall = scores["overall"]
         ov_row = QHBoxLayout()
-        ov_lbl = QLabel(f"Overall: {overall}/75")
-        ov_lbl.setStyleSheet(
+        self.ov_lbl = QLabel(f"Overall: {overall}/75")
+        self.ov_lbl.setStyleSheet(
             "color:#F1F5F9;font-size:14px;"
             "font-weight:bold;"
         )
@@ -141,7 +152,7 @@ class GoalWidget(QWidget):
             "border-radius:6px;padding:3px 10px;"
             "font-size:12px;font-weight:bold;border:none;"
         )
-        ov_row.addWidget(ov_lbl)
+        ov_row.addWidget(self.ov_lbl)
         ov_row.addStretch()
         ov_row.addWidget(level_lbl)
         cur_l.addLayout(ov_row)
@@ -233,7 +244,10 @@ class GoalWidget(QWidget):
             Qt.Orientation.Horizontal
         )
         self.minutes_slider.setRange(30, 180)
-        self.minutes_slider.setValue(90)
+        daily_minutes = int(
+            self.profile.get("daily_minutes", 90)
+        )
+        self.minutes_slider.setValue(daily_minutes)
         self.minutes_slider.setTickInterval(30)
         self.minutes_slider.setStyleSheet("""
             QSlider::groove:horizontal {
@@ -250,7 +264,7 @@ class GoalWidget(QWidget):
             }
         """)
 
-        self.minutes_lbl = QLabel("90 min")
+        self.minutes_lbl = QLabel(f"{daily_minutes} min")
         self.minutes_lbl.setStyleSheet(
             "color:#3B82F6;font-size:13px;"
             "font-weight:bold;min-width:60px;"
@@ -411,27 +425,30 @@ class GoalWidget(QWidget):
             "writing":    "#C084FC",
             "listening":  "#8B5CF6",
             "reading":    "#10B981",
-            "vocabulary": "#4ADE80"
         }
         icons = {
             "speaking":   "🎤",
             "writing":    "✍️",
             "listening":  "🎧",
             "reading":    "📖",
-            "vocabulary": "📚"
         }
 
-        for skill, minutes in sorted(
-            daily.items(),
-            key=lambda x: x[1], reverse=True
-        ):
+        for skill in EXAM_SKILLS:
+            minutes = daily.get(skill, 0)
+            if minutes <= 0:
+                continue
+
             color = colors.get(skill, "#3B82F6")
             icon = icons.get(skill, "📄")
+            label = EXAM_SKILL_NAMES.get(
+                skill,
+                skill.title(),
+            )
             total_min = plan.get("daily_minutes", 90)
-            pct = int(minutes / total_min * 100)
+            pct = int(minutes / total_min * 100) if total_min else 0
 
             row = QHBoxLayout()
-            sk_lbl = QLabel(f"{icon} {skill.title()}")
+            sk_lbl = QLabel(f"{icon} {label}")
             sk_lbl.setStyleSheet(
                 f"color:{color};font-size:13px;"
                 "font-weight:bold;border:none;"
@@ -516,7 +533,7 @@ class GoalWidget(QWidget):
 
         self.plan_l.addLayout(mile_row)
 
-        # Taxminiy natija
+        # Taxminiy natija (faqat 4 ta imtihon skilli)
         proj = plan.get("projected_scores", {})
         if proj:
             proj_title = QLabel("TAXMINIY NATIJA")
@@ -526,71 +543,99 @@ class GoalWidget(QWidget):
             )
             self.plan_l.addWidget(proj_title)
 
-            proj_row = QHBoxLayout()
-            proj_row.setSpacing(8)
+            proj_grid = QGridLayout()
+            proj_grid.setSpacing(8)
 
-            for skill, score in proj.items():
-                if skill == "overall":
+            for index, (skill_key, label, color) in enumerate(
+                EXAM_SKILL_DISPLAY
+            ):
+                score = proj.get(skill_key)
+                if score is None:
                     continue
-                color = colors.get(skill, "#3B82F6")
+
                 pf = QFrame()
+                pf.setSizePolicy(
+                    QSizePolicy.Policy.Expanding,
+                    QSizePolicy.Policy.Fixed,
+                )
+                pf.setMinimumWidth(120)
                 pf.setStyleSheet("""
                     QFrame {
                         background:#0F172A;
                         border-radius:8px;
                         border:1px solid #1E293B;
                     }
+                    QLabel {
+                        background:transparent;
+                        border:none;
+                    }
                 """)
                 pl = QVBoxLayout(pf)
-                pl.setContentsMargins(8, 6, 8, 6)
+                pl.setContentsMargins(10, 8, 10, 8)
                 pl.setSpacing(2)
 
-                sk_l = QLabel(skill.title())
-                sk_l.setStyleSheet(
-                    f"color:{color};font-size:10px;border:none;"
+                sk_l = QLabel(label)
+                sk_l.setAlignment(
+                    Qt.AlignmentFlag.AlignCenter
                 )
-                sk_l.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                sk_l.setStyleSheet(
+                    f"color:{color};font-size:10px;"
+                )
 
                 sc_l = QLabel(f"{score}")
+                sc_l.setAlignment(
+                    Qt.AlignmentFlag.AlignCenter
+                )
                 sc_l.setStyleSheet(
                     f"color:{color};font-size:14px;"
-                    "font-weight:bold;border:none;"
+                    "font-weight:bold;"
                 )
-                sc_l.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
                 pl.addWidget(sk_l)
                 pl.addWidget(sc_l)
-                proj_row.addWidget(pf)
+                proj_grid.addWidget(
+                    pf,
+                    index // 2,
+                    index % 2,
+                )
 
-            # Overall
             ov_score = proj.get("overall", 0)
             ov_f = QFrame()
+            ov_f.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Fixed,
+            )
             ov_f.setStyleSheet("""
                 QFrame {
                     background:#0F2A1E;
                     border-radius:8px;
                     border:1px solid #10B981;
                 }
+                QLabel {
+                    background:transparent;
+                    border:none;
+                }
             """)
-            ov_fl = QVBoxLayout(ov_f)
-            ov_fl.setContentsMargins(8, 6, 8, 6)
-            ov_fl.setSpacing(2)
+            ov_fl = QHBoxLayout(ov_f)
+            ov_fl.setContentsMargins(12, 8, 12, 8)
+            ov_fl.setSpacing(8)
+
             ov_tl = QLabel("Overall")
             ov_tl.setStyleSheet(
-                "color:#10B981;font-size:10px;border:none;"
+                "color:#10B981;font-size:11px;font-weight:bold;"
             )
-            ov_tl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             ov_sl = QLabel(f"{ov_score}")
             ov_sl.setStyleSheet(
-                "color:#10B981;font-size:14px;"
-                "font-weight:bold;border:none;"
+                "color:#10B981;font-size:16px;font-weight:bold;"
             )
-            ov_sl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            ov_fl.addStretch()
             ov_fl.addWidget(ov_tl)
             ov_fl.addWidget(ov_sl)
-            proj_row.addWidget(ov_f)
+            ov_fl.addStretch()
 
-            self.plan_l.addLayout(proj_row)
+            proj_grid.addWidget(ov_f, 2, 0, 1, 2)
+
+            self.plan_l.addLayout(proj_grid)
 
         self.plan_frame.show()
 
@@ -616,4 +661,37 @@ class GoalWidget(QWidget):
         threading.Thread(target=run, daemon=True).start()
 
     def refresh(self):
-        pass
+        self.profile = get_profile(self.db)
+        if hasattr(self, "minutes_slider"):
+            daily_minutes = int(
+                self.profile.get("daily_minutes", 90)
+            )
+            self.minutes_slider.setValue(daily_minutes)
+            self.minutes_lbl.setText(f"{daily_minutes} min")
+
+        scores = get_current_scores(self.db)
+        if hasattr(self, "ov_lbl"):
+            self.ov_lbl.setText(
+                f"Overall: {scores['overall']}/75"
+            )
+
+        for sf in self.findChildren(QFrame):
+            for lbl in sf.findChildren(QLabel):
+                if lbl.objectName() == "score_value":
+                    parent_layout = sf.layout()
+                    if not parent_layout:
+                        continue
+                    skill_lbl = parent_layout.itemAt(0).widget()
+                    if not skill_lbl:
+                        continue
+                    text = skill_lbl.text().lower()
+                    if "listening" in text:
+                        lbl.setText(f"{scores['listening']}/75")
+                    elif "reading" in text:
+                        lbl.setText(f"{scores['reading']}/75")
+                    elif "speaking" in text:
+                        lbl.setText(f"{scores['speaking']}/75")
+                    elif "writing" in text:
+                        lbl.setText(f"{scores['writing']}/75")
+
+        self._load_existing_plan()

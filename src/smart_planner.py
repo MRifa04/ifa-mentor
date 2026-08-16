@@ -1,8 +1,8 @@
 import json
 from datetime import datetime, timedelta
-from config.settings import (
-    CURRENT_SCORES, CEFR_LEVELS, USER_NAME
-)
+from config.settings import CEFR_LEVELS
+from src.scores import get_current_scores, EXAM_SKILLS
+from src.user_profile import get_profile
 
 
 class SmartPlanner:
@@ -19,7 +19,7 @@ class SmartPlanner:
         """
         Maqsad va vaqtga asoslangan to'liq o'quv reja
         """
-        current_overall = CURRENT_SCORES["overall"]
+        current_overall = get_current_scores(self.db)["overall"]
         target_overall = CEFR_LEVELS[target_level][0]
         gap = max(0, target_overall - current_overall)
 
@@ -57,7 +57,7 @@ class SmartPlanner:
         )
 
         return {
-            "user": USER_NAME,
+            "user": get_profile(self.db)["name"],
             "current_overall": current_overall,
             "target_level": target_level,
             "target_overall": target_overall,
@@ -81,7 +81,7 @@ class SmartPlanner:
         Har bir skill uchun og'irlik hisoblash
         Study DNA va hozirgi ballarga asoslanadi
         """
-        scores = CURRENT_SCORES
+        scores = get_current_scores(self.db)
         max_score = 75
 
         # Zaiflik darajasi (100 - foiz)
@@ -90,7 +90,6 @@ class SmartPlanner:
             "writing":   100 - int(scores["writing"] / max_score * 100),
             "listening": 100 - int(scores["listening"] / max_score * 100),
             "reading":   100 - int(scores["reading"] / max_score * 100),
-            "vocabulary": 40  # Default
         }
 
         # Study DNA dan zaif joylarni olish
@@ -115,6 +114,8 @@ class SmartPlanner:
         """
         plan = {}
         for skill, weight in weights.items():
+            if skill not in EXAM_SKILLS:
+                continue
             minutes = round(total_minutes * weight / 100)
             minutes = max(5, min(minutes, 40))
             plan[skill] = minutes
@@ -124,7 +125,10 @@ class SmartPlanner:
         if current_total != total_minutes:
             diff = total_minutes - current_total
             # Eng zaif skillga qo'shish
-            weakest = max(weights, key=weights.get)
+            weakest = max(
+                {k: v for k, v in weights.items() if k in EXAM_SKILLS},
+                key=weights.get,
+            )
             plan[weakest] = max(5, plan[weakest] + diff)
 
         return plan
@@ -142,13 +146,13 @@ class SmartPlanner:
 
         # Skill rotatsiyasi
         skill_focus = [
-            "speaking",   # Du
-            "writing",    # Se
-            "listening",  # Ch
-            "reading",    # Pa
-            "speaking",   # Ju (speaking ikki marta)
-            "vocabulary", # Sh (yengil kun)
-            "writing",    # Ya
+            "speaking",
+            "writing",
+            "listening",
+            "reading",
+            "speaking",
+            "reading",
+            "writing",
         ]
 
         schedule = {}
@@ -186,7 +190,7 @@ class SmartPlanner:
         """
         Mashq qilish natijasida taxminiy ballar
         """
-        current = dict(CURRENT_SCORES)
+        current = dict(get_current_scores(self.db))
 
         # Har bir skill uchun o'sish koeffitsienti
         growth_rates = {
@@ -199,21 +203,31 @@ class SmartPlanner:
 
         projected = {}
         for skill, minutes in daily_plan.items():
-            if skill in current:
-                rate = growth_rates.get(skill, 0.08)
-                # Kunlik o'sish * kunlar * vaqt koeffitsienti
-                time_factor = minutes / 30
-                growth = days * rate * time_factor
-                new_score = min(
-                    75,
-                    current[skill] + growth
-                )
-                projected[skill] = round(new_score, 1)
+            if skill not in EXAM_SKILLS:
+                continue
 
-        # Overall hisoblash
-        if projected:
+            if skill not in current:
+                continue
+
+            rate = growth_rates.get(skill, 0.08)
+            time_factor = minutes / 30
+            growth = days * rate * time_factor
+            new_score = min(
+                75,
+                current[skill] + growth,
+            )
+            projected[skill] = round(new_score, 1)
+
+        exam_values = [
+            projected[skill]
+            for skill in EXAM_SKILLS
+            if skill in projected
+        ]
+
+        if exam_values:
             projected["overall"] = round(
-                sum(projected.values()) / len(projected), 1
+                sum(exam_values) / len(exam_values),
+                1,
             )
 
         return projected
@@ -257,7 +271,6 @@ class SmartPlanner:
             "writing": "essay",
             "listening": "practice",
             "reading": "practice",
-            "vocabulary": "review"
         }
 
         return [
@@ -268,6 +281,7 @@ class SmartPlanner:
                 "original_duration_minutes": int(minutes),
             }
             for skill, minutes in daily.items()
+            if skill in EXAM_SKILLS and int(minutes) > 0
         ]
 
     def _calculate_carryover(self, today=None, window_days=5):
@@ -376,8 +390,9 @@ class SmartPlanner:
             }
 
         latest = history[0]
+        baseline = get_current_scores(self.db)["overall"]
         current_overall = latest.get(
-            "overall", CURRENT_SCORES["overall"]
+            "overall", baseline
         )
 
         days_passed = (
@@ -390,7 +405,7 @@ class SmartPlanner:
             goal_plan["daily_gain_needed"] * days_passed
         )
         actual_gain = (
-            current_overall - CURRENT_SCORES["overall"]
+            current_overall - baseline
         )
 
         on_track = actual_gain >= expected_gain * 0.8

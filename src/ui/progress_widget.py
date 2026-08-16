@@ -7,7 +7,13 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPainter, QPen, QColor, QPolygonF
 from PyQt6.QtCore import QPointF
 import math
-from config.settings import CURRENT_SCORES, CEFR_LEVELS, USER_NAME
+from config.settings import CEFR_LEVELS, TARGET_LEVEL
+from src.user_profile import get_profile
+from src.scores import (
+    get_current_scores,
+    get_weakest_skill,
+    EXAM_SKILL_DISPLAY,
+)
 
 class RadarChart(QWidget):
     """Study DNA Radar Chart"""
@@ -177,9 +183,22 @@ class ProgressWidget(QWidget):
         super().__init__()
         self.db = db
         self.ai = ai
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
         self._build()
 
     def _build(self):
+        self.profile = get_profile(self.db)
+        current_level = self.profile.get(
+            "current_level",
+            "B1",
+        )
+        target_level = self.profile.get(
+            "target_level",
+            TARGET_LEVEL,
+        )
+        user_name = self.profile.get("name", "User")
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(
@@ -198,7 +217,7 @@ class ProgressWidget(QWidget):
             "font-size: 22px; font-weight: bold; color: #F1F5F9;"
         )
         sub = QLabel(
-            f"{USER_NAME} — B1 → B2 | "
+            f"{user_name} — {current_level} → {target_level} | "
             "So'nggi 30 kunlik natijalar"
         )
         sub.setStyleSheet("color: #94A3B8; font-size: 13px;")
@@ -206,17 +225,43 @@ class ProgressWidget(QWidget):
         layout.addWidget(sub)
 
         # Stat cards
-        overall = CURRENT_SCORES["overall"]
-        gap = max(0, CEFR_LEVELS["B2"][0] - overall)
+        scores = get_current_scores(self.db)
+        overall = scores["overall"]
+        target_score = CEFR_LEVELS.get(
+            target_level,
+            (51, 64),
+        )[0]
+        gap = max(0, target_score - overall)
+        skill_scores = {
+            "Reading": scores["reading"],
+            "Listening": scores["listening"],
+            "Speaking": scores["speaking"],
+            "Writing": scores["writing"],
+        }
+        weakest = get_weakest_skill(scores, self.db)
+        strongest = max(
+            skill_scores,
+            key=skill_scores.get,
+        )
 
         stats_layout = QGridLayout()
         stats_layout.setSpacing(12)
 
         cards = [
             ("Overall Ball", overall, "75 dan", "#3B82F6"),
-            ("B2 ga qoldi", f"+{gap}", "ball kerak", "#F59E0B"),
-            ("Eng kuchli", "Reading", "73%", "#10B981"),
-            ("Eng zaif", "Speaking", "46%", "#EF4444"),
+            (f"{target_level} ga qoldi", f"+{gap}", "ball kerak", "#F59E0B"),
+            (
+                "Eng kuchli",
+                strongest,
+                f"{int(skill_scores[strongest] / 75 * 100)}%",
+                "#10B981",
+            ),
+            (
+                "Eng zaif",
+                weakest,
+                f"{int(skill_scores[weakest] / 75 * 100)}%",
+                "#EF4444",
+            ),
         ]
         for i, (title_c, val, sub_c, color) in enumerate(cards):
             card = StatCard(title_c, val, sub_c, color)
@@ -244,10 +289,10 @@ class ProgressWidget(QWidget):
         skills_layout.addWidget(skills_title)
 
         skill_data = [
-            ("Reading",   CURRENT_SCORES["reading"],   "#10B981"),
-            ("Listening", CURRENT_SCORES["listening"], "#8B5CF6"),
-            ("Speaking",  CURRENT_SCORES["speaking"],  "#3B82F6"),
-            ("Writing",   CURRENT_SCORES["writing"],   "#C084FC"),
+            ("Reading",   scores["reading"],   "#10B981"),
+            ("Listening", scores["listening"], "#8B5CF6"),
+            ("Speaking",  scores["speaking"],  "#3B82F6"),
+            ("Writing",   scores["writing"],   "#C084FC"),
         ]
         for skill, score, color in skill_data:
             bar = MiniProgressBar(skill, score, 75, color)
@@ -279,11 +324,8 @@ class ProgressWidget(QWidget):
         radar_layout.addWidget(radar_title)
 
         radar_scores = {
-            "Reading":    int(CURRENT_SCORES["reading"] / 75 * 100),
-            "Listening":  int(CURRENT_SCORES["listening"] / 75 * 100),
-            "Speaking":   int(CURRENT_SCORES["speaking"] / 75 * 100),
-            "Writing":    int(CURRENT_SCORES["writing"] / 75 * 100),
-            "Vocabulary": 60,
+            label: int(scores[key] / 75 * 100)
+            for key, label, _ in EXAM_SKILL_DISPLAY
         }
         radar = RadarChart(radar_scores)
         radar_layout.addWidget(radar)
@@ -302,7 +344,7 @@ class ProgressWidget(QWidget):
         roadmap_layout.setContentsMargins(20, 18, 20, 18)
         roadmap_layout.setSpacing(12)
 
-        road_title = QLabel("B2 YO'L XARITASI")
+        road_title = QLabel(f"{target_level} YO'L XARITASI")
         road_title.setStyleSheet(
             "color: #3B82F6; font-size: 11px;"
             "font-weight: bold; letter-spacing: 1px;"
@@ -346,7 +388,7 @@ class ProgressWidget(QWidget):
         for level, min_s, max_s, color in levels:
             row = QHBoxLayout()
             is_current = min_s <= overall <= max_s
-            is_target = level == "B2"
+            is_target = level == target_level
 
             dot = QLabel(
                 "●" if is_current else
@@ -373,7 +415,9 @@ class ProgressWidget(QWidget):
         roadmap_layout.addStretch()
 
         # Motivatsiya
-        mot = QLabel(f"🎯 B2 ga faqat +{gap} ball kerak!")
+        mot = QLabel(
+            f"🎯 {target_level} ga faqat +{gap} ball kerak!"
+        )
         mot.setStyleSheet(
             "color: #10B981; font-size: 13px; font-weight: bold;"
         )
@@ -385,9 +429,12 @@ class ProgressWidget(QWidget):
         layout.addStretch()
 
         scroll.setWidget(content)
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll)
+        self.main_layout.addWidget(scroll)
 
     def refresh(self):
-        pass
+        while self.main_layout.count():
+            item = self.main_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        self._build()

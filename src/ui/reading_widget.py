@@ -8,6 +8,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 
+from src.ui.daily_task import DailyTaskMixin
+
 
 class ReadingSignals(QObject):
     text_ready = pyqtSignal(str, str)
@@ -25,8 +27,9 @@ class PartBadge(QLabel):
         }
         color = colors.get(level, "#94A3B8")
         self.setStyleSheet(
-            f"background:{color}22;color:{color};"
-            f"border:1px solid {color}44;"
+            f"background:{color};"
+            f"color:#FFFFFF;"
+            f"border:none;"
             f"border-radius:6px;padding:3px 10px;"
             f"font-size:11px;font-weight:bold;"
         )
@@ -135,11 +138,12 @@ class QuestionItem(QFrame):
         return is_correct
 
 
-class ReadingWidget(QWidget):
+class ReadingWidget(QWidget, DailyTaskMixin):
     def __init__(self, db, ai):
         super().__init__()
         self.db = db
         self.ai = ai
+        self.init_daily_task()
         self.signals = ReadingSignals()
         self.current_text = ""
         self.current_part = "Part3"
@@ -158,7 +162,13 @@ class ReadingWidget(QWidget):
         self.signals.error.connect(self._show_error)
 
     def _build(self):
-        main = QHBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        self.attach_task_banner(outer)
+
+        content = QWidget()
+        main = QHBoxLayout(content)
         main.setContentsMargins(0, 0, 0, 0)
         main.setSpacing(0)
 
@@ -395,6 +405,7 @@ class ReadingWidget(QWidget):
 
         main.addWidget(left, 1)
         main.addWidget(right)
+        outer.addWidget(content, 1)
 
     def _part_btn_style(self, active):
         if active:
@@ -566,6 +577,7 @@ class ReadingWidget(QWidget):
             total=total
         )
         self.db.update_progress("reading", int(pct * 0.75))
+        self.finish_skill_task(correct, total)
         self.q_count_lbl.setText(
             f"{total}/{total} javoblandi"
         )
@@ -593,5 +605,75 @@ class ReadingWidget(QWidget):
         s = self.timer_seconds % 60
         self.timer_lbl.setText(f"{m:02d}:{s:02d}")
 
+    def apply_mock_exam_task(self, task):
+        DailyTaskMixin.apply_mock_exam_task(self, task)
+        if not task:
+            return
+        pdf = task.get("pdf_material")
+        if pdf:
+            self._start_mock_reading(pdf)
+
+    def _start_mock_reading(self, material):
+        self.start_btn.setEnabled(False)
+        self.start_btn.setText("⏳ Yuklanmoqda...")
+        self.result_frame.hide()
+        self.submit_btn.setEnabled(False)
+        self.timer_seconds = 0
+        self.timer.start(1000)
+
+        def run():
+            try:
+                from src.mock_pdf_text import get_reading_part_from_pdf
+                from src.reading import ReadingModule
+                from config.settings import READING_RULES
+
+                rm = ReadingModule(self.db, self.ai)
+                pdf_path = material.get("file_path", "")
+                part_num = int(self.current_part.replace("Part", ""))
+                part_text = get_reading_part_from_pdf(pdf_path, part_num)
+                if part_text.strip():
+                    text = part_text
+                else:
+                    text = rm.get_text_from_material(material)
+
+                title = material.get("set_title") or material.get(
+                    "title", "Mock PDF"
+                )
+                self.signals.text_ready.emit(text, title)
+
+                rule = READING_RULES["parts"].get(
+                    self.current_part, {}
+                )
+                level = rule.get("level", "B2")
+                count = rule.get("questions", 5)
+                q_type = rule.get("type", "multiple_choice")
+
+                questions = self.ai.generate_reading_questions(
+                    text=text,
+                    part_name=self.current_part,
+                    level=level,
+                    question_type=q_type,
+                    count=count,
+                )
+                questions["part"] = self.current_part
+                questions["level"] = level
+                questions["q_type"] = q_type
+                self.signals.questions_ready.emit(questions)
+            except Exception as e:
+                self.signals.error.emit(str(e))
+
+        threading.Thread(target=run, daemon=True).start()
+
     def refresh(self):
-        pass
+        if self.mock_exam_task and self._task_banner_label:
+            task = self.mock_exam_task
+            title = task.get("mock_title", "Mock")
+            skill = task.get("skill", "")
+            step = task.get("step", 1)
+            total = task.get("total_steps", 4)
+            self._task_banner_label.setText(
+                f"🎓 Mock: {title} — {skill} ({step}/{total})"
+            )
+            self._task_banner.show()
+        elif self.daily_task and self._task_banner_label:
+            self.apply_daily_task(self.daily_task)
